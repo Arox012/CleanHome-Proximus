@@ -38,11 +38,11 @@ private enum class AppCategory(val title: String) {
 }
 
 class MainActivity : Activity() {
-    private val backgroundColor = Color.rgb(7, 9, 15)
-    private val surface = Color.rgb(20, 25, 37)
-    private val surfaceRaised = Color.rgb(29, 36, 52)
-    private val accent = Color.rgb(143, 160, 255)
-    private val muted = Color.rgb(160, 169, 190)
+    private val backgroundColor = Color.rgb(5, 7, 14)
+    private val surface = Color.rgb(17, 21, 34)
+    private val surfaceRaised = Color.rgb(31, 28, 53)
+    private val accent = Color.rgb(153, 105, 255)
+    private val muted = Color.rgb(157, 166, 190)
 
     private var selectedCategory = AppCategory.ALL
     private lateinit var grid: GridView
@@ -83,15 +83,15 @@ class MainActivity : Activity() {
         }
         val brand = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         brand.addView(TextView(this).apply {
-            text = "C L E A N H O M E"
-            textSize = 12f
-            letterSpacing = 0.08f
+            text = "V A N T A"
+            textSize = 16f
+            letterSpacing = 0.24f
             setTextColor(accent)
             typeface = Typeface.DEFAULT_BOLD
         })
         brand.addView(TextView(this).apply {
-            text = "Votre divertissement, simplement."
-            textSize = 27f
+            text = "TV  /  ENTERTAINMENT SYSTEM"
+            textSize = 13f
             setTextColor(Color.WHITE)
             setPadding(0, dp(5), 0, 0)
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
@@ -105,28 +105,28 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             background = rounded(
-                intArrayOf(Color.rgb(31, 39, 63), Color.rgb(19, 25, 40)),
+                intArrayOf(Color.rgb(47, 27, 86), Color.rgb(13, 35, 55)),
                 dp(22)
             )
             setPadding(dp(26), dp(19), dp(24), dp(19))
         }
         val heroText = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         heroText.addView(TextView(this).apply {
-            text = "TOUT VOTRE UNIVERS"
+            text = "VANTA  /  HOME EXPERIENCE"
             textSize = 10f
             letterSpacing = 0.16f
             setTextColor(accent)
             typeface = Typeface.DEFAULT_BOLD
         })
         heroText.addView(TextView(this).apply {
-            text = "Retrouvez vos applications"
+            text = "Votre univers. Sans limites."
             textSize = 21f
             setTextColor(Color.WHITE)
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             setPadding(0, dp(5), 0, 0)
         })
         heroText.addView(TextView(this).apply {
-            text = "Films, musique, jeux et bien plus encore."
+            text = "Tous vos divertissements réunis au même endroit."
             textSize = 13f
             setTextColor(muted)
             setPadding(0, dp(4), 0, 0)
@@ -191,14 +191,14 @@ class MainActivity : Activity() {
             setPadding(0, dp(2), 0, dp(12))
         }
         sectionHeader.addView(TextView(this).apply {
-            text = "APPLICATIONS"
+            text = "VOTRE BIBLIOTHÈQUE"
             textSize = 11f
             letterSpacing = 0.14f
             setTextColor(muted)
             typeface = Typeface.DEFAULT_BOLD
         }, LinearLayout.LayoutParams(0, -2, 1f))
         sectionHeader.addView(TextView(this).apply {
-            text = "Sélectionnez une application avec OK"
+            text = "NAVIGUEZ AVEC LA TÉLÉCOMMANDE  •  OK POUR OUVRIR"
             textSize = 11f
             setTextColor(Color.rgb(111, 122, 147))
         })
@@ -308,9 +308,9 @@ class MainActivity : Activity() {
     private fun categorize(packageName: String, label: String): AppCategory {
         val value = "$packageName $label".lowercase()
         return when {
-            listOf("youtube", "netflix", "disney", "crunchy", "prime video", "plex", "twitch", "auvio", "rtl", "tvi", "tv", "f1").any(value::contains) -> AppCategory.VIDEO
-            listOf("spotify", "music", "deezer", "soundcloud").any(value::contains) -> AppCategory.MUSIC
-            listOf("game", "geforce", "steam", "xbox", "play").any(value::contains) -> AppCategory.GAMES
+            listOf("youtube", "netflix", "disney", "crunchy", "primevideo", "prime video", "plex", "twitch", "auvio", "rtl", "tvi", "f1", "stb", "proximus").any(value::contains) -> AppCategory.VIDEO
+            listOf("spotify", "music", "deezer", "soundcloud", "radio").any(value::contains) -> AppCategory.MUSIC
+            listOf("game", "geforce", "steam", "xbox", "playstation", "retroarch", "emulator").any(value::contains) -> AppCategory.GAMES
             else -> AppCategory.OTHER
         }
     }
@@ -360,14 +360,14 @@ class MainActivity : Activity() {
             isFocusable = true
             isFocusableInTouchMode = true
             isClickable = true
-            setPadding(dp(10), dp(15), dp(10), dp(13))
-            layoutParams = AbsListView.LayoutParams(-1, dp(142))
+            setPadding(dp(10), dp(16), dp(10), dp(14))
+            layoutParams = AbsListView.LayoutParams(-1, dp(154))
             background = rounded(surface, dp(17))
 
             addView(ImageView(this@MainActivity).apply {
                 tag = "app_icon"
                 scaleType = ImageView.ScaleType.FIT_CENTER
-            }, LinearLayout.LayoutParams(dp(62), dp(62)))
+            }, LinearLayout.LayoutParams(dp(68), dp(68)))
 
             addView(TextView(this@MainActivity).apply {
                 tag = "app_label"
@@ -381,7 +381,7 @@ class MainActivity : Activity() {
             }, LinearLayout.LayoutParams(-1, -2))
 
             setOnFocusChangeListener { view, focused ->
-                view.background = rounded(if (focused) surfaceRaised else surface, dp(17))
+                view.background = if (focused) rounded(surfaceRaised, dp(17)).apply { setStroke(dp(2), accent) } else rounded(surface, dp(17))
                 view.scaleX = if (focused) 1.045f else 1f
                 view.scaleY = if (focused) 1.045f else 1f
                 view.elevation = if (focused) dp(8).toFloat() else 0f
