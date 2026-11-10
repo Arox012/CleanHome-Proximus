@@ -206,12 +206,14 @@ class MainActivity : Activity() {
     }
 
     private fun openProximus() {
-        val intent = packageManager.getLaunchIntentForPackage("be.px.stbtvclient")
-        if (intent != null) {
-            startActivity(intent)
-        } else {
-            Toast.makeText(this, "Interface Proximus introuvable", Toast.LENGTH_SHORT).show()
-        }
+        val intent = Intent().setClassName(
+            "be.px.stbtvclient",
+            "tv.threess.threeready.ui.generic.activity.MainActivity"
+        )
+        runCatching { startActivity(intent) }
+            .onFailure {
+                Toast.makeText(this, "Impossible d'ouvrir l'interface Proximus", Toast.LENGTH_SHORT).show()
+            }
     }
 
     private fun rounded(color: Int, radius: Int) = GradientDrawable().apply {
