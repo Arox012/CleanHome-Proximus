@@ -12,8 +12,11 @@ import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
+import android.widget.AbsListView
 import android.widget.BaseAdapter
+import android.widget.FrameLayout
 import android.widget.GridView
+import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -31,24 +34,29 @@ private enum class AppCategory(val title: String) {
     VIDEO("Films & séries"),
     MUSIC("Musique"),
     GAMES("Jeux"),
-    OTHER("Autres")
+    OTHER("Applications")
 }
 
 class MainActivity : Activity() {
-    private val backgroundColor = Color.rgb(8, 10, 16)
-    private val surface = Color.rgb(22, 26, 38)
-    private val accent = Color.rgb(139, 155, 255)
+    private val backgroundColor = Color.rgb(7, 9, 15)
+    private val surface = Color.rgb(20, 25, 37)
+    private val surfaceRaised = Color.rgb(29, 36, 52)
+    private val accent = Color.rgb(143, 160, 255)
+    private val muted = Color.rgb(160, 169, 190)
+
     private var selectedCategory = AppCategory.ALL
     private lateinit var grid: GridView
     private lateinit var adapter: AppsAdapter
-    private lateinit var categoryBar: LinearLayout
-    private lateinit var apps: List<TvApp>
+    private lateinit var countLabel: TextView
+    private lateinit var emptyLabel: TextView
     private val categoryButtons = mutableMapOf<AppCategory, TextView>()
+    private var apps: List<TvApp> = emptyList()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.statusBarColor = backgroundColor
         window.navigationBarColor = backgroundColor
+        window.decorView.systemUiVisibility = 0
         apps = discoverApps()
         buildInterface()
     }
@@ -64,54 +72,87 @@ class MainActivity : Activity() {
     private fun buildInterface() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(42), dp(28), dp(42), dp(24))
+            setPadding(dp(54), dp(30), dp(54), dp(28))
             setBackgroundColor(backgroundColor)
             isFocusable = false
         }
 
-        val top = LinearLayout(this).apply {
+        val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        val titleColumn = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        titleColumn.addView(TextView(this).apply {
-            text = "CLEANHOME"
+        val brand = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        brand.addView(TextView(this).apply {
+            text = "C L E A N H O M E"
             textSize = 12f
-            letterSpacing = 0.24f
+            letterSpacing = 0.08f
             setTextColor(accent)
             typeface = Typeface.DEFAULT_BOLD
         })
-        titleColumn.addView(TextView(this).apply {
-            text = "Tout ce que vous aimez, au même endroit."
-            textSize = 25f
+        brand.addView(TextView(this).apply {
+            text = "Votre divertissement, simplement."
+            textSize = 27f
             setTextColor(Color.WHITE)
             setPadding(0, dp(5), 0, 0)
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         })
-        top.addView(titleColumn, LinearLayout.LayoutParams(0, -2, 1f))
+        header.addView(brand, LinearLayout.LayoutParams(0, -2, 1f))
+        header.addView(makeActionButton("PROXIMUS", accent) { openProximus() },
+            LinearLayout.LayoutParams(-2, dp(50)))
+        root.addView(header)
 
-        val proximus = TextView(this).apply {
-            text = "  Proximus  "
-            textSize = 14f
-            setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER
-            background = rounded(surface, dp(12))
-            isFocusable = true
-            isClickable = true
-            setPadding(dp(12), dp(12), dp(12), dp(12))
-            setOnClickListener { openProximus() }
-            setOnFocusChangeListener { v, hasFocus ->
-                v.background = rounded(if (hasFocus) accent else surface, dp(12))
-                (v as TextView).setTextColor(if (hasFocus) Color.BLACK else Color.WHITE)
-            }
-        }
-        top.addView(proximus, LinearLayout.LayoutParams(-2, dp(48)))
-        root.addView(top)
-
-        categoryBar = LinearLayout(this).apply {
+        val hero = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, dp(22), 0, dp(16))
+            background = rounded(
+                intArrayOf(Color.rgb(31, 39, 63), Color.rgb(19, 25, 40)),
+                dp(22)
+            )
+            setPadding(dp(26), dp(19), dp(24), dp(19))
+        }
+        val heroText = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        heroText.addView(TextView(this).apply {
+            text = "TOUT VOTRE UNIVERS"
+            textSize = 10f
+            letterSpacing = 0.16f
+            setTextColor(accent)
+            typeface = Typeface.DEFAULT_BOLD
+        })
+        heroText.addView(TextView(this).apply {
+            text = "Retrouvez vos applications"
+            textSize = 21f
+            setTextColor(Color.WHITE)
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            setPadding(0, dp(5), 0, 0)
+        })
+        heroText.addView(TextView(this).apply {
+            text = "Films, musique, jeux et bien plus encore."
+            textSize = 13f
+            setTextColor(muted)
+            setPadding(0, dp(4), 0, 0)
+        })
+        hero.addView(heroText, LinearLayout.LayoutParams(0, -2, 1f))
+        countLabel = TextView(this).apply {
+            textSize = 13f
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            background = rounded(Color.rgb(44, 53, 77), dp(14))
+            setPadding(dp(16), dp(10), dp(16), dp(10))
+        }
+        hero.addView(countLabel)
+        val heroParams = LinearLayout.LayoutParams(-1, -2)
+        heroParams.topMargin = dp(24)
+        root.addView(hero, heroParams)
+
+        val categoryScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+            isFillViewport = false
+        }
+        val categoryBar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(20), dp(8), dp(16))
         }
         AppCategory.entries.forEach { category ->
             val button = TextView(this).apply {
@@ -119,42 +160,103 @@ class MainActivity : Activity() {
                 textSize = 14f
                 gravity = Gravity.CENTER
                 isFocusable = true
+                isFocusableInTouchMode = true
                 isClickable = true
-                setPadding(dp(17), dp(10), dp(17), dp(10))
+                setPadding(dp(19), dp(11), dp(19), dp(11))
                 setOnClickListener {
                     selectedCategory = category
                     updateCategoryStyles()
                     refreshGrid()
                 }
-                setOnFocusChangeListener { v, focused ->
-                    if (focused) v.background = rounded(accent, dp(18))
-                    else updateCategoryStyles()
-                    (v as TextView).setTextColor(if (focused || selectedCategory == category) Color.BLACK else Color.LTGRAY)
+                setOnFocusChangeListener { view, focused ->
+                    if (focused) {
+                        view.background = rounded(accent, dp(18))
+                        (view as TextView).setTextColor(Color.BLACK)
+                    } else {
+                        updateCategoryStyles()
+                    }
                 }
             }
             categoryButtons[category] = button
-            val params = LinearLayout.LayoutParams(-2, dp(42))
-            params.marginEnd = dp(8)
+            val params = LinearLayout.LayoutParams(-2, dp(44))
+            params.marginEnd = dp(10)
             categoryBar.addView(button, params)
         }
-        root.addView(categoryBar)
+        categoryScroll.addView(categoryBar)
+        root.addView(categoryScroll)
 
+        val sectionHeader = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(2), 0, dp(12))
+        }
+        sectionHeader.addView(TextView(this).apply {
+            text = "APPLICATIONS"
+            textSize = 11f
+            letterSpacing = 0.14f
+            setTextColor(muted)
+            typeface = Typeface.DEFAULT_BOLD
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        sectionHeader.addView(TextView(this).apply {
+            text = "Sélectionnez une application avec OK"
+            textSize = 11f
+            setTextColor(Color.rgb(111, 122, 147))
+        })
+        root.addView(sectionHeader)
+
+        val content = FrameLayout(this)
         grid = GridView(this).apply {
-            numColumns = 5
+            val widthDp = resources.displayMetrics.widthPixels / resources.displayMetrics.density
+            numColumns = if (widthDp >= 1500f) 6 else 5
             horizontalSpacing = dp(16)
-            verticalSpacing = dp(18)
+            verticalSpacing = dp(16)
             stretchMode = GridView.STRETCH_COLUMN_WIDTH
             selector = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
             isFocusable = true
             isFocusableInTouchMode = true
+            clipToPadding = false
+            setPadding(0, dp(4), 0, dp(8))
         }
         adapter = AppsAdapter()
         grid.adapter = adapter
-        root.addView(grid, LinearLayout.LayoutParams(-1, 0, 1f))
+        content.addView(grid, FrameLayout.LayoutParams(-1, -1))
+
+        emptyLabel = TextView(this).apply {
+            text = "Aucune application dans cette catégorie."
+            textSize = 15f
+            setTextColor(muted)
+            gravity = Gravity.CENTER
+            visibility = View.GONE
+        }
+        content.addView(emptyLabel, FrameLayout.LayoutParams(-1, -1))
+        root.addView(content, LinearLayout.LayoutParams(-1, 0, 1f))
+
         setContentView(root)
         updateCategoryStyles()
+        refreshGrid()
         grid.requestFocus()
     }
+
+    private fun makeActionButton(title: String, color: Int, action: () -> Unit): TextView =
+        TextView(this).apply {
+            text = title
+            textSize = 13f
+            letterSpacing = 0.06f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setTextColor(Color.BLACK)
+            background = rounded(color, dp(15))
+            isFocusable = true
+            isClickable = true
+            setPadding(dp(22), dp(13), dp(22), dp(13))
+            setOnClickListener { action() }
+            setOnFocusChangeListener { view, focused ->
+                view.background = rounded(if (focused) Color.WHITE else color, dp(15))
+                (view as TextView).setTextColor(Color.BLACK)
+                view.scaleX = if (focused) 1.04f else 1f
+                view.scaleY = if (focused) 1.04f else 1f
+            }
+        }
 
     private fun updateCategoryStyles() {
         categoryButtons.forEach { (category, view) ->
@@ -164,8 +266,16 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun visibleApps(): List<TvApp> =
+        if (selectedCategory == AppCategory.ALL) apps
+        else apps.filter { it.category == selectedCategory }
+
     private fun refreshGrid() {
-        if (::adapter.isInitialized) adapter.notifyDataSetChanged()
+        if (!::adapter.isInitialized) return
+        adapter.notifyDataSetChanged()
+        val count = visibleApps().size
+        countLabel.text = count.toString() + " application" + if (count > 1) "s" else ""
+        emptyLabel.visibility = if (count == 0) View.VISIBLE else View.GONE
     }
 
     private fun discoverApps(): List<TvApp> {
@@ -181,12 +291,12 @@ class MainActivity : Activity() {
                 @Suppress("DEPRECATION")
                 packageManager.queryIntentActivities(intent, 0)
             }
-            results.forEach { info ->
-                val packageName = info.activityInfo?.packageName ?: return@forEach
-                if (packageName == packageNameOfSelf() || found.containsKey(packageName)) return@forEach
+            results.forEach resultLoop@{ info ->
+                val packageName = info.activityInfo?.packageName ?: return@resultLoop
+                if (packageName == packageNameOfSelf() || found.containsKey(packageName)) return@resultLoop
                 val label = info.loadLabel(packageManager)?.toString()?.trim().orEmpty()
-                if (label.isBlank()) return@forEach
-                val icon = runCatching { info.loadIcon(packageManager) }.getOrNull() ?: return@forEach
+                if (label.isBlank()) return@resultLoop
+                val icon = runCatching { info.loadIcon(packageManager) }.getOrNull() ?: return@resultLoop
                 found[packageName] = TvApp(label, packageName, icon, categorize(packageName, label))
             }
         }
@@ -198,7 +308,7 @@ class MainActivity : Activity() {
     private fun categorize(packageName: String, label: String): AppCategory {
         val value = "$packageName $label".lowercase()
         return when {
-            listOf("youtube", "netflix", "disney", "crunchy", "prime video", "plex", "twitch", "auvio", "rtl", "tvi", "tv").any(value::contains) -> AppCategory.VIDEO
+            listOf("youtube", "netflix", "disney", "crunchy", "prime video", "plex", "twitch", "auvio", "rtl", "tvi", "tv", "f1").any(value::contains) -> AppCategory.VIDEO
             listOf("spotify", "music", "deezer", "soundcloud").any(value::contains) -> AppCategory.MUSIC
             listOf("game", "geforce", "steam", "xbox", "play").any(value::contains) -> AppCategory.GAMES
             else -> AppCategory.OTHER
@@ -221,52 +331,61 @@ class MainActivity : Activity() {
         cornerRadius = radius.toFloat()
     }
 
-    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+    private fun rounded(colors: IntArray, radius: Int) = GradientDrawable(
+        GradientDrawable.Orientation.LEFT_RIGHT, colors
+    ).apply {
+        cornerRadius = radius.toFloat()
+    }
+
+    private fun dp(value: Int): Int =
+        (value * resources.displayMetrics.density).toInt()
 
     private inner class AppsAdapter : BaseAdapter() {
-        private val visibleApps: List<TvApp>
-            get() = if (selectedCategory == AppCategory.ALL) apps
-            else apps.filter { it.category == selectedCategory }
-
-        override fun getCount() = visibleApps.size
-        override fun getItem(position: Int) = visibleApps[position]
-        override fun getItemId(position: Int) = visibleApps[position].packageName.hashCode().toLong()
+        override fun getCount() = visibleApps().size
+        override fun getItem(position: Int) = visibleApps()[position]
+        override fun getItemId(position: Int) = getItem(position).packageName.hashCode().toLong()
 
         override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
             val app = getItem(position)
-            val card = (convertView as? LinearLayout) ?: LinearLayout(this@MainActivity).apply {
-                orientation = LinearLayout.VERTICAL
-                gravity = Gravity.CENTER
-                isFocusable = true
-                isClickable = true
-                setPadding(dp(10), dp(14), dp(10), dp(12))
-                layoutParams = android.widget.AbsListView.LayoutParams(-1, dp(132))
-                val icon = ImageView(this@MainActivity).apply {
-                    tag = "app_icon"
-                    scaleType = ImageView.ScaleType.FIT_CENTER
-                }
-                addView(icon, LinearLayout.LayoutParams(dp(58), dp(58)))
-                val label = TextView(this@MainActivity).apply {
-                    tag = "app_label"
-                    textSize = 13f
-                    gravity = Gravity.CENTER
-                    maxLines = 2
-                    ellipsize = android.text.TextUtils.TruncateAt.END
-                    setTextColor(Color.WHITE)
-                    setPadding(0, dp(9), 0, 0)
-                }
-                addView(label, LinearLayout.LayoutParams(-1, -2))
-                setOnFocusChangeListener { v, focused ->
-                    v.background = rounded(if (focused) Color.rgb(48, 56, 78) else surface, dp(16))
-                    v.scaleX = if (focused) 1.045f else 1f
-                    v.scaleY = if (focused) 1.045f else 1f
-                }
-                setOnClickListener { launchApp(app.packageName) }
-            }
-            (card.findViewWithTag<ImageView>("app_icon")).setImageDrawable(app.icon)
+            val card = (convertView as? LinearLayout) ?: createAppCard()
+            card.findViewWithTag<ImageView>("app_icon").setImageDrawable(app.icon)
             card.findViewWithTag<TextView>("app_label").text = app.label
             card.setOnClickListener { launchApp(app.packageName) }
             return card
+        }
+
+        private fun createAppCard() = LinearLayout(this@MainActivity).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            isFocusable = true
+            isFocusableInTouchMode = true
+            isClickable = true
+            setPadding(dp(10), dp(15), dp(10), dp(13))
+            layoutParams = AbsListView.LayoutParams(-1, dp(142))
+            background = rounded(surface, dp(17))
+
+            addView(ImageView(this@MainActivity).apply {
+                tag = "app_icon"
+                scaleType = ImageView.ScaleType.FIT_CENTER
+            }, LinearLayout.LayoutParams(dp(62), dp(62)))
+
+            addView(TextView(this@MainActivity).apply {
+                tag = "app_label"
+                textSize = 13f
+                gravity = Gravity.CENTER
+                maxLines = 2
+                ellipsize = android.text.TextUtils.TruncateAt.END
+                setTextColor(Color.WHITE)
+                setPadding(0, dp(10), 0, 0)
+                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            }, LinearLayout.LayoutParams(-1, -2))
+
+            setOnFocusChangeListener { view, focused ->
+                view.background = rounded(if (focused) surfaceRaised else surface, dp(17))
+                view.scaleX = if (focused) 1.045f else 1f
+                view.scaleY = if (focused) 1.045f else 1f
+                view.elevation = if (focused) dp(8).toFloat() else 0f
+            }
         }
     }
 
@@ -277,17 +396,17 @@ class MainActivity : Activity() {
             return
         }
         runCatching { startActivity(intent) }
-            .onFailure { Toast.makeText(this, "Impossible d'ouvrir cette application", Toast.LENGTH_SHORT).show() }
+            .onFailure {
+                Toast.makeText(this, "Impossible d'ouvrir cette application", Toast.LENGTH_SHORT).show()
+            }
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        if (keyCode == KeyEvent.KEYCODE_BACK) {
-            if (selectedCategory != AppCategory.ALL) {
-                selectedCategory = AppCategory.ALL
-                updateCategoryStyles()
-                refreshGrid()
-                return true
-            }
+        if (keyCode == KeyEvent.KEYCODE_BACK && selectedCategory != AppCategory.ALL) {
+            selectedCategory = AppCategory.ALL
+            updateCategoryStyles()
+            refreshGrid()
+            return true
         }
         return super.onKeyDown(keyCode, event)
     }
