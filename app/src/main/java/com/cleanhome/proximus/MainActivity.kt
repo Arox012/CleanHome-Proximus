@@ -452,6 +452,7 @@ class MainActivity : Activity() {
             val card = (convertView as? LinearLayout) ?: createAppCard()
             card.findViewWithTag<ImageView>("app_icon").setImageDrawable(app.icon)
             card.findViewWithTag<TextView>("app_label").text = app.label
+            card.findViewWithTag<TextView>("app_favorite").text = if (favorites.contains(app.packageName)) "★ FAVORI" else "MAINTENIR : FAVORI"
             card.setOnClickListener { launchApp(app.packageName) }
             card.setOnLongClickListener {
                 if (!favorites.add(app.packageName)) favorites.remove(app.packageName)
@@ -487,6 +488,15 @@ class MainActivity : Activity() {
                 setTextColor(Color.WHITE)
                 setPadding(0, dp(10), 0, 0)
                 typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            }, LinearLayout.LayoutParams(-1, -2))
+
+            addView(TextView(this@MainActivity).apply {
+                tag = "app_favorite"
+                textSize = 8f
+                letterSpacing = 0.05f
+                gravity = Gravity.CENTER
+                setTextColor(accent)
+                setPadding(0, dp(4), 0, 0)
             }, LinearLayout.LayoutParams(-1, -2))
 
             setOnFocusChangeListener { view, focused ->
