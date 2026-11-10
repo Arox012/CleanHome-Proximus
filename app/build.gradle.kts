@@ -11,8 +11,8 @@ android {
         applicationId = "com.cleanhome.proximus"
         minSdk = 31
         targetSdk = 35
-        versionCode = 8
-        versionName = "0.7.1"
+        versionCode = 9
+        versionName = "0.8.0"
     }
 
     buildTypes {
