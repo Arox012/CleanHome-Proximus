@@ -26,7 +26,8 @@ private data class TvApp(
     val label: String,
     val packageName: String,
     val icon: android.graphics.drawable.Drawable,
-    val category: AppCategory
+    val category: AppCategory,
+    val tvCompatible: Boolean
 )
 
 private enum class AppCategory(val title: String) {
@@ -325,6 +326,11 @@ class MainActivity : Activity() {
         grid = GridView(this).apply {
             val widthDp = (resources.displayMetrics.widthPixels / resources.displayMetrics.density) - 290f
             numColumns = if (widthDp >= 1250f) 5 else 4
+            isVerticalScrollBarEnabled = true
+            scrollbarStyle = View.SCROLLBARS_INSIDE_OVERLAY
+            smoothScrollBarEnabled = true
+            fadingEdgeLength = dp(24)
+            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
             horizontalSpacing = dp(14)
             verticalSpacing = dp(14)
             stretchMode = GridView.STRETCH_COLUMN_WIDTH
@@ -487,13 +493,19 @@ class MainActivity : Activity() {
                 @Suppress("DEPRECATION")
                 packageManager.queryIntentActivities(intent, 0)
             }
+            val isTvIntent = intent.hasCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
             results.forEach resultLoop@{ info ->
                 val packageName = info.activityInfo?.packageName ?: return@resultLoop
-                if (packageName == packageNameOfSelf() || found.containsKey(packageName)) return@resultLoop
+                if (packageName == packageNameOfSelf()) return@resultLoop
                 val label = info.loadLabel(packageManager)?.toString()?.trim().orEmpty()
                 if (label.isBlank()) return@resultLoop
                 val icon = runCatching { info.loadIcon(packageManager) }.getOrNull() ?: return@resultLoop
-                found[packageName] = TvApp(label, packageName, icon, categorize(packageName, label))
+                val existing = found[packageName]
+                if (existing == null) {
+                    found[packageName] = TvApp(label, packageName, icon, categorize(packageName, label), isTvIntent)
+                } else if (isTvIntent && !existing.tvCompatible) {
+                    found[packageName] = existing.copy(tvCompatible = true)
+                }
             }
         }
         return found.values.sortedBy { it.label.lowercase() }
@@ -570,9 +582,44 @@ class MainActivity : Activity() {
             val card = (convertView as? LinearLayout) ?: createAppCard()
             card.findViewWithTag<ImageView>("app_icon").setImageDrawable(app.icon)
             card.findViewWithTag<TextView>("app_label").text = app.label
-            card.findViewWithTag<TextView>("app_favorite").text = if (favorites.contains(app.packageName)) "★ FAVORI" else "MAINTENIR : FAVORI"
-            card.contentDescription = "Ouvrir ${app.label}. Appui long pour gérer les favoris."
+            card.findViewWithTag<TextView>("app_favorite").text = when {
+                favorites.contains(app.packageName) -> "★ FAVORI"
+                !app.tvCompatible -> "APP ANDROID • NON TV"
+                else -> "APPLICATION TV"
+            }
+            card.contentDescription = "Ouvrir ${app.label}. ${if (app.tvCompatible) "Compatible TV" else "Application Android non optimisée TV"}. Appui long pour gérer les favoris."
             card.setOnClickListener { launchApp(app.packageName) }
+            card.setOnKeyListener { _, keyCode, event ->
+                if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
+                when (keyCode) {
+                    KeyEvent.KEYCODE_DPAD_LEFT -> {
+                        if (position % grid.numColumns == 0) {
+                            categoryButtons[selectedCategory]?.requestFocus()
+                            true
+                        } else false
+                    }
+                    KeyEvent.KEYCODE_DPAD_UP -> {
+                        if (position < grid.numColumns) {
+                            if (recentSection.visibility == View.VISIBLE && recentRail.childCount > 0) {
+                                recentRail.getChildAt(0)?.requestFocus()
+                            } else {
+                                searchInput.requestFocus()
+                            }
+                            true
+                        } else false
+                    }
+                    else -> false
+                }
+            }
+            card.setOnFocusChangeListener { view, focused ->
+                view.background = if (focused) rounded(surfaceRaised, dp(17)).apply { setStroke(dp(2), accent) } else rounded(surface, dp(17))
+                view.scaleX = if (focused) 1.045f else 1f
+                view.scaleY = if (focused) 1.045f else 1f
+                view.elevation = if (focused) dp(8).toFloat() else 0f
+                if (focused) {
+                    grid.post { grid.smoothScrollToPosition(position) }
+                }
+            }
             card.setOnLongClickListener {
                 if (!favorites.add(app.packageName)) favorites.remove(app.packageName)
                 prefs.edit().putStringSet("favorites", favorites.toSet()).apply()
@@ -618,12 +665,6 @@ class MainActivity : Activity() {
                 setPadding(0, dp(4), 0, 0)
             }, LinearLayout.LayoutParams(-1, -2))
 
-            setOnFocusChangeListener { view, focused ->
-                view.background = if (focused) rounded(surfaceRaised, dp(17)).apply { setStroke(dp(2), accent) } else rounded(surface, dp(17))
-                view.scaleX = if (focused) 1.045f else 1f
-                view.scaleY = if (focused) 1.045f else 1f
-                view.elevation = if (focused) dp(8).toFloat() else 0f
-            }
         }
     }
 
