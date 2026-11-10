@@ -44,6 +44,7 @@ class MainActivity : Activity() {
     private val surfaceRaised = Color.rgb(31, 28, 53)
     private val accent = Color.rgb(153, 105, 255)
     private val muted = Color.rgb(157, 166, 190)
+    private val cyan = Color.rgb(86, 220, 232)
 
     private val prefs by lazy { getSharedPreferences("vanta_settings", MODE_PRIVATE) }
     private val favorites = linkedSetOf<String>()
@@ -59,6 +60,17 @@ class MainActivity : Activity() {
     private lateinit var recentRail: LinearLayout
     private val categoryButtons = mutableMapOf<AppCategory, TextView>()
     private var apps: List<TvApp> = emptyList()
+    private lateinit var clockLabel: TextView
+    private val clockHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val clockTick = object : Runnable {
+        override fun run() {
+            if (::clockLabel.isInitialized) {
+                clockLabel.text = java.text.SimpleDateFormat("HH:mm  •  EEEE d MMMM", java.util.Locale.FRENCH)
+                    .format(java.util.Date()).replaceFirstChar { it.uppercase() }
+            }
+            clockHandler.postDelayed(this, 30_000)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -69,6 +81,12 @@ class MainActivity : Activity() {
         recent.addAll(prefs.getString("recent", "").orEmpty().split("|").filter { it.isNotBlank() })
         apps = discoverApps()
         buildInterface()
+        clockHandler.post(clockTick)
+    }
+
+    override fun onDestroy() {
+        clockHandler.removeCallbacks(clockTick)
+        super.onDestroy()
     }
 
     override fun onResume() {
@@ -108,7 +126,14 @@ class MainActivity : Activity() {
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         })
         header.addView(brand, LinearLayout.LayoutParams(0, -2, 1f))
-        header.addView(makeActionButton("PROXIMUS", accent) { openProximus() },
+        clockLabel = TextView(this).apply {
+            textSize = 12f
+            setTextColor(muted)
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 0, dp(18), 0)
+        }
+        header.addView(clockLabel)
+        header.addView(makeActionButton("▶  TV EN DIRECT", cyan) { openProximus() },
             LinearLayout.LayoutParams(-2, dp(50)))
         root.addView(header)
 
@@ -123,21 +148,21 @@ class MainActivity : Activity() {
         }
         val heroText = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         heroText.addView(TextView(this).apply {
-            text = "VANTA  /  HOME EXPERIENCE"
+            text = "VANTA  /  VOTRE UNIVERS TV"
             textSize = 10f
             letterSpacing = 0.16f
-            setTextColor(accent)
+            setTextColor(cyan)
             typeface = Typeface.DEFAULT_BOLD
         })
         heroText.addView(TextView(this).apply {
-            text = "Votre univers. Sans limites."
+            text = "Vos chaînes Proximus.\nToutes vos applications."
             textSize = 21f
             setTextColor(Color.WHITE)
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             setPadding(0, dp(5), 0, 0)
         })
         heroText.addView(TextView(this).apply {
-            text = "Tous vos divertissements réunis au même endroit."
+            text = "Lancez la TV en direct ou retrouvez vos plateformes préférées."
             textSize = 13f
             setTextColor(muted)
             setPadding(0, dp(4), 0, 0)
@@ -200,6 +225,7 @@ class MainActivity : Activity() {
                     selectedCategory = category
                     updateCategoryStyles()
                     refreshGrid()
+                    buildRecentRail()
                 }
                 setOnFocusChangeListener { view, focused ->
                     if (focused) {
@@ -223,7 +249,7 @@ class MainActivity : Activity() {
             visibility = View.GONE
         }
         recentSection.addView(TextView(this).apply {
-            text = "RÉCEMMENT OUVERTES"
+            text = "REPRENDRE  /  RÉCEMMENT OUVERTES"
             textSize = 10f
             letterSpacing = 0.14f
             setTextColor(muted)
@@ -248,14 +274,14 @@ class MainActivity : Activity() {
             setPadding(0, dp(2), 0, dp(12))
         }
         sectionHeader.addView(TextView(this).apply {
-            text = "VOTRE BIBLIOTHÈQUE"
+            text = "VOS APPLICATIONS"
             textSize = 11f
             letterSpacing = 0.14f
             setTextColor(muted)
             typeface = Typeface.DEFAULT_BOLD
         }, LinearLayout.LayoutParams(0, -2, 1f))
         sectionHeader.addView(TextView(this).apply {
-            text = "NAVIGUEZ AVEC LA TÉLÉCOMMANDE  •  OK POUR OUVRIR"
+            text = "OK : OUVRIR   •   APPUI LONG : FAVORI"
             textSize = 11f
             setTextColor(Color.rgb(111, 122, 147))
         })
@@ -418,15 +444,39 @@ class MainActivity : Activity() {
         }
     }
 
+    /**
+     * VANTA replaces only the HOME screen. The Proximus TV client stays installed
+     * and is launched directly through its known main activity.
+     */
     private fun openProximus() {
         val intent = Intent().setClassName(
             "be.px.stbtvclient",
             "tv.threess.threeready.ui.generic.activity.MainActivity"
         )
-        runCatching { startActivity(intent) }
-            .onFailure {
-                Toast.makeText(this, "Impossible d'ouvrir l'interface Proximus", Toast.LENGTH_SHORT).show()
+        runCatching {
+            startActivity(intent)
+            rememberRecent("be.px.stbtvclient")
+        }.onFailure {
+            val fallback = packageManager.getLaunchIntentForPackage("be.px.stbtvclient")
+            if (fallback != null) {
+                runCatching {
+                    startActivity(fallback)
+                    rememberRecent("be.px.stbtvclient")
+                }.onFailure {
+                    Toast.makeText(this, "L'application Proximus TV ne peut pas être ouverte.", Toast.LENGTH_LONG).show()
+                }
+            } else {
+                Toast.makeText(this, "Proximus TV est introuvable. Ne désinstallez pas l'application Proximus.", Toast.LENGTH_LONG).show()
             }
+        }
+    }
+
+    private fun rememberRecent(packageName: String) {
+        recent.remove(packageName)
+        recent.add(0, packageName)
+        while (recent.size > 10) recent.removeAt(recent.lastIndex)
+        prefs.edit().putString("recent", recent.joinToString("|")).apply()
+        buildRecentRail()
     }
 
     private fun rounded(color: Int, radius: Int) = GradientDrawable().apply {
@@ -454,6 +504,7 @@ class MainActivity : Activity() {
             card.findViewWithTag<ImageView>("app_icon").setImageDrawable(app.icon)
             card.findViewWithTag<TextView>("app_label").text = app.label
             card.findViewWithTag<TextView>("app_favorite").text = if (favorites.contains(app.packageName)) "★ FAVORI" else "MAINTENIR : FAVORI"
+            card.contentDescription = "Ouvrir ${app.label}. Appui long pour gérer les favoris."
             card.setOnClickListener { launchApp(app.packageName) }
             card.setOnLongClickListener {
                 if (!favorites.add(app.packageName)) favorites.remove(app.packageName)
@@ -517,17 +568,17 @@ class MainActivity : Activity() {
         }
         runCatching {
             startActivity(intent)
-            recent.remove(packageName)
-            recent.add(0, packageName)
-            while (recent.size > 10) recent.removeAt(recent.lastIndex)
-            prefs.edit().putString("recent", recent.joinToString("|")).apply()
-            buildRecentRail()
+            rememberRecent(packageName)
         }.onFailure {
             Toast.makeText(this, "Impossible d'ouvrir cette application", Toast.LENGTH_SHORT).show()
         }
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_TV || keyCode == KeyEvent.KEYCODE_GUIDE) {
+            openProximus()
+            return true
+        }
         if (keyCode == KeyEvent.KEYCODE_BACK && searchQuery.isNotBlank()) {
             if (::searchInput.isInitialized) searchInput.setText("")
             searchQuery = ""
