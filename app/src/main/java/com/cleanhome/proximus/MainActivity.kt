@@ -30,7 +30,8 @@ private data class TvApp(
 )
 
 private enum class AppCategory(val title: String) {
-    ALL("Tout"),
+    ALL("Découvrir"),
+    FAVORITES("Favoris"),
     VIDEO("Films & séries"),
     MUSIC("Musique"),
     GAMES("Jeux"),
@@ -44,6 +45,10 @@ class MainActivity : Activity() {
     private val accent = Color.rgb(153, 105, 255)
     private val muted = Color.rgb(157, 166, 190)
 
+    private val prefs by lazy { getSharedPreferences("vanta_settings", MODE_PRIVATE) }
+    private val favorites = linkedSetOf<String>()
+    private val recent = mutableListOf<String>()
+    private var searchQuery = ""
     private var selectedCategory = AppCategory.ALL
     private lateinit var grid: GridView
     private lateinit var adapter: AppsAdapter
@@ -57,6 +62,8 @@ class MainActivity : Activity() {
         window.statusBarColor = backgroundColor
         window.navigationBarColor = backgroundColor
         window.decorView.systemUiVisibility = 0
+        favorites.addAll(prefs.getStringSet("favorites", emptySet()) ?: emptySet())
+        recent.addAll(prefs.getString("recent", "").orEmpty().split("|").filter { it.isNotBlank() })
         apps = discoverApps()
         buildInterface()
     }
@@ -143,6 +150,27 @@ class MainActivity : Activity() {
         val heroParams = LinearLayout.LayoutParams(-1, -2)
         heroParams.topMargin = dp(24)
         root.addView(hero, heroParams)
+
+        val search = android.widget.EditText(this).apply {
+            hint = "⌕   Rechercher une application..."
+            textSize = 13f
+            singleLine = true
+            setTextColor(Color.WHITE)
+            setHintTextColor(muted)
+            setPadding(dp(16), 0, dp(16), 0)
+            background = rounded(surface, dp(13)).apply { setStroke(dp(1), Color.rgb(43, 49, 69)) }
+            addTextChangedListener(object : android.text.TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                    searchQuery = s?.toString()?.trim().orEmpty()
+                    refreshGrid()
+                }
+                override fun afterTextChanged(s: android.text.Editable?) {}
+            })
+        }
+        val searchParams = LinearLayout.LayoutParams(dp(370), dp(42))
+        searchParams.topMargin = dp(14)
+        root.addView(search, searchParams)
 
         val categoryScroll = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
@@ -266,9 +294,19 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun visibleApps(): List<TvApp> =
-        if (selectedCategory == AppCategory.ALL) apps
-        else apps.filter { it.category == selectedCategory }
+    private fun visibleApps(): List<TvApp> {
+        val categoryApps = when (selectedCategory) {
+            AppCategory.ALL -> apps
+            AppCategory.FAVORITES -> apps.filter { favorites.contains(it.packageName) }
+            else -> apps.filter { it.category == selectedCategory }
+        }
+        val filtered = if (searchQuery.isBlank()) categoryApps else categoryApps.filter {
+            it.label.contains(searchQuery, ignoreCase = true) || it.packageName.contains(searchQuery, ignoreCase = true)
+        }
+        return if (selectedCategory == AppCategory.ALL && searchQuery.isBlank())
+            filtered.sortedWith(compareByDescending<TvApp> { favorites.contains(it.packageName) }.thenBy { it.label.lowercase() })
+        else filtered.sortedBy { it.label.lowercase() }
+    }
 
     private fun refreshGrid() {
         if (!::adapter.isInitialized) return
@@ -320,7 +358,13 @@ class MainActivity : Activity() {
             "be.px.stbtvclient",
             "tv.threess.threeready.ui.generic.activity.MainActivity"
         )
-        runCatching { startActivity(intent) }
+        runCatching {
+            startActivity(intent)
+            recent.remove(packageName)
+            recent.add(0, packageName)
+            while (recent.size > 10) recent.removeAt(recent.lastIndex)
+            prefs.edit().putString("recent", recent.joinToString("|")).apply()
+        }
             .onFailure {
                 Toast.makeText(this, "Impossible d'ouvrir l'interface Proximus", Toast.LENGTH_SHORT).show()
             }
@@ -351,6 +395,13 @@ class MainActivity : Activity() {
             card.findViewWithTag<ImageView>("app_icon").setImageDrawable(app.icon)
             card.findViewWithTag<TextView>("app_label").text = app.label
             card.setOnClickListener { launchApp(app.packageName) }
+            card.setOnLongClickListener {
+                if (!favorites.add(app.packageName)) favorites.remove(app.packageName)
+                prefs.edit().putStringSet("favorites", favorites.toSet()).apply()
+                Toast.makeText(this@MainActivity, if (favorites.contains(app.packageName)) "Ajouté aux favoris" else "Retiré des favoris", Toast.LENGTH_SHORT).show()
+                refreshGrid()
+                true
+            }
             return card
         }
 
@@ -402,6 +453,10 @@ class MainActivity : Activity() {
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_BACK && searchQuery.isNotBlank()) {
+            searchQuery = ""
+            return true
+        }
         if (keyCode == KeyEvent.KEYCODE_BACK && selectedCategory != AppCategory.ALL) {
             selectedCategory = AppCategory.ALL
             updateCategoryStyles()
