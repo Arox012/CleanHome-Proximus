@@ -35,7 +35,7 @@ private enum class AppCategory(val title: String) {
 }
 
 class MainActivity : Activity() {
-    private val background = Color.rgb(8, 10, 16)
+    private val backgroundColor = Color.rgb(8, 10, 16)
     private val surface = Color.rgb(22, 26, 38)
     private val accent = Color.rgb(139, 155, 255)
     private var selectedCategory = AppCategory.ALL
@@ -47,8 +47,8 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor = background
-        window.navigationBarColor = background
+        window.statusBarColor = backgroundColor
+        window.navigationBarColor = backgroundColor
         apps = discoverApps()
         buildInterface()
     }
@@ -65,7 +65,7 @@ class MainActivity : Activity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(42), dp(28), dp(42), dp(24))
-            setBackgroundColor(background)
+            setBackgroundColor(backgroundColor)
             isFocusable = false
         }
 
@@ -238,7 +238,7 @@ class MainActivity : Activity() {
                 isFocusable = true
                 isClickable = true
                 setPadding(dp(10), dp(14), dp(10), dp(12))
-                layoutParams = GridView.LayoutParams(-1, dp(132))
+                layoutParams = android.widget.AbsListView.LayoutParams(-1, dp(132))
                 val icon = ImageView(this@MainActivity).apply {
                     tag = "app_icon"
                     scaleType = ImageView.ScaleType.FIT_CENTER
