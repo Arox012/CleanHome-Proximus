@@ -54,6 +54,7 @@ class MainActivity : Activity() {
     private lateinit var adapter: AppsAdapter
     private lateinit var countLabel: TextView
     private lateinit var emptyLabel: TextView
+    private lateinit var searchInput: android.widget.EditText
     private lateinit var recentSection: LinearLayout
     private lateinit var recentRail: LinearLayout
     private val categoryButtons = mutableMapOf<AppCategory, TextView>()
@@ -154,7 +155,7 @@ class MainActivity : Activity() {
         heroParams.topMargin = dp(24)
         root.addView(hero, heroParams)
 
-        val search = android.widget.EditText(this).apply {
+        searchInput = android.widget.EditText(this).apply {
             hint = "⌕   Rechercher une application..."
             textSize = 13f
             singleLine = true
@@ -174,7 +175,7 @@ class MainActivity : Activity() {
         }
         val searchParams = LinearLayout.LayoutParams(dp(370), dp(42))
         searchParams.topMargin = dp(14)
-        root.addView(search, searchParams)
+        root.addView(searchInput, searchParams)
 
         val categoryScroll = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
@@ -528,7 +529,10 @@ class MainActivity : Activity() {
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         if (keyCode == KeyEvent.KEYCODE_BACK && searchQuery.isNotBlank()) {
+            if (::searchInput.isInitialized) searchInput.setText("")
             searchQuery = ""
+            refreshGrid()
+            buildRecentRail()
             return true
         }
         if (keyCode == KeyEvent.KEYCODE_BACK && selectedCategory != AppCategory.ALL) {
