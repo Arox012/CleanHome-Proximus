@@ -158,7 +158,7 @@ class MainActivity : Activity() {
         searchInput = android.widget.EditText(this).apply {
             hint = "⌕   Rechercher une application..."
             textSize = 13f
-            singleLine = true
+            setSingleLine(true)
             setTextColor(Color.WHITE)
             setHintTextColor(muted)
             setPadding(dp(16), 0, dp(16), 0)
