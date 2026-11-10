@@ -40,12 +40,12 @@ private enum class AppCategory(val title: String) {
 }
 
 class MainActivity : Activity() {
-    private val backgroundColor = Color.rgb(5, 7, 14)
-    private val surface = Color.rgb(17, 21, 34)
-    private val surfaceRaised = Color.rgb(31, 28, 53)
-    private val accent = Color.rgb(153, 105, 255)
-    private val muted = Color.rgb(157, 166, 190)
-    private val cyan = Color.rgb(86, 220, 232)
+    private val backgroundColor = Color.rgb(6, 8, 17)
+    private val surface = Color.rgb(16, 21, 36)
+    private val surfaceRaised = Color.rgb(37, 35, 65)
+    private val accent = Color.rgb(173, 139, 255)
+    private val muted = Color.rgb(164, 174, 198)
+    private val cyan = Color.rgb(105, 225, 207)
 
     private val prefs by lazy { getSharedPreferences("vanta_settings", MODE_PRIVATE) }
     private val favorites = linkedSetOf<String>()
@@ -105,7 +105,7 @@ class MainActivity : Activity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(dp(30), dp(24), dp(30), dp(24))
-            setBackgroundColor(backgroundColor)
+            background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(Color.rgb(9, 12, 27), Color.rgb(7, 10, 20), Color.rgb(15, 11, 29)))
             isFocusable = false
         }
 
@@ -116,7 +116,7 @@ class MainActivity : Activity() {
             background = rounded(surface, dp(22))
         }
         sidebar.addView(TextView(this).apply {
-            text = "V A N T A"
+            text = "VANTA"
             textSize = 19f
             letterSpacing = 0.22f
             setTextColor(accent)
@@ -124,7 +124,7 @@ class MainActivity : Activity() {
             setPadding(dp(8), dp(8), dp(8), dp(3))
         })
         sidebar.addView(TextView(this).apply {
-            text = "TV  •  ENTERTAINMENT"
+            text = "ENTERTAINMENT OS"
             textSize = 9f
             letterSpacing = 0.08f
             setTextColor(muted)
@@ -177,7 +177,7 @@ class MainActivity : Activity() {
         }
         sidebar.addView(View(this), LinearLayout.LayoutParams(1, 0, 1f))
         sidebar.addView(TextView(this).apply {
-            text = "NAVIGUER  •  OK POUR OUVRIR"
+            text = "VANTA TV  •  NAVIGATION"
             textSize = 8f
             letterSpacing = 0.04f
             setTextColor(Color.rgb(105, 115, 139))
@@ -214,28 +214,28 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             background = rounded(
-                intArrayOf(Color.rgb(48, 29, 83), Color.rgb(15, 39, 59)),
+                intArrayOf(Color.rgb(58, 35, 105), Color.rgb(24, 47, 76), Color.rgb(15, 67, 73)),
                 dp(20)
             )
             setPadding(dp(22), dp(15), dp(20), dp(15))
         }
         val heroText = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         heroText.addView(TextView(this).apply {
-            text = "VANTA  /  VOTRE UNIVERS TV"
+            text = "VANTA  /  YOUR ENTERTAINMENT"
             textSize = 9f
             letterSpacing = 0.14f
             setTextColor(cyan)
             typeface = Typeface.DEFAULT_BOLD
         })
         heroText.addView(TextView(this).apply {
-            text = "Tout votre divertissement, au même endroit."
+            text = "Votre univers. Une seule interface."
             textSize = 19f
             setTextColor(Color.WHITE)
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             setPadding(0, dp(5), 0, 0)
         })
         heroText.addView(TextView(this).apply {
-            text = "Vos chaînes Proximus et vos applications restent accessibles."
+            text = "TV en direct, streaming, jeux et applications réunis."
             textSize = 11f
             setTextColor(muted)
             setPadding(0, dp(4), 0, 0)
@@ -316,7 +316,7 @@ class MainActivity : Activity() {
             typeface = Typeface.DEFAULT_BOLD
         }, LinearLayout.LayoutParams(0, -2, 1f))
         sectionHeader.addView(TextView(this).apply {
-            text = "OK : OUVRIR  •  APPUI LONG : FAVORI"
+            text = "OK : OUVRIR   •   MAINTENIR : FAVORI"
             textSize = 9f
             setTextColor(Color.rgb(111, 122, 147))
         })
@@ -402,8 +402,7 @@ class MainActivity : Activity() {
             setOnFocusChangeListener { view, focused ->
                 view.background = rounded(if (focused) Color.WHITE else color, dp(15))
                 (view as TextView).setTextColor(Color.BLACK)
-                view.scaleX = if (focused) 1.04f else 1f
-                view.scaleY = if (focused) 1.04f else 1f
+                view.animate().scaleX(if (focused) 1.045f else 1f).scaleY(if (focused) 1.045f else 1f).setDuration(160).start()
             }
         }
 
@@ -494,6 +493,8 @@ class MainActivity : Activity() {
             results.forEach resultLoop@{ info ->
                 val packageName = info.activityInfo?.packageName ?: return@resultLoop
                 if (packageName == packageNameOfSelf()) return@resultLoop
+                // Hide the stock YouTube client in VANTA; SmartTube remains visible.
+                if (packageName.lowercase().contains("youtube") && !packageName.lowercase().contains("smarttube")) return@resultLoop
                 val label = info.loadLabel(packageManager)?.toString()?.trim().orEmpty()
                 if (label.isBlank()) return@resultLoop
                 val icon = runCatching { info.loadIcon(packageManager) }.getOrNull() ?: return@resultLoop
@@ -610,9 +611,8 @@ class MainActivity : Activity() {
             }
             card.setOnFocusChangeListener { view, focused ->
                 view.background = if (focused) rounded(surfaceRaised, dp(17)).apply { setStroke(dp(2), accent) } else rounded(surface, dp(17))
-                view.scaleX = if (focused) 1.045f else 1f
-                view.scaleY = if (focused) 1.045f else 1f
-                view.elevation = if (focused) dp(8).toFloat() else 0f
+                view.animate().scaleX(if (focused) 1.055f else 1f).scaleY(if (focused) 1.055f else 1f).setDuration(170).start()
+                view.elevation = if (focused) dp(10).toFloat() else 0f
                 if (focused) {
                     grid.post { grid.smoothScrollToPosition(position) }
                 }
