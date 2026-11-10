@@ -54,6 +54,8 @@ class MainActivity : Activity() {
     private lateinit var adapter: AppsAdapter
     private lateinit var countLabel: TextView
     private lateinit var emptyLabel: TextView
+    private lateinit var recentSection: LinearLayout
+    private lateinit var recentRail: LinearLayout
     private val categoryButtons = mutableMapOf<AppCategory, TextView>()
     private var apps: List<TvApp> = emptyList()
 
@@ -73,6 +75,7 @@ class MainActivity : Activity() {
         if (::grid.isInitialized) {
             apps = discoverApps()
             refreshGrid()
+            buildRecentRail()
         }
     }
 
@@ -164,6 +167,7 @@ class MainActivity : Activity() {
                 override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                     searchQuery = s?.toString()?.trim().orEmpty()
                     refreshGrid()
+                    if (::recentSection.isInitialized) buildRecentRail()
                 }
                 override fun afterTextChanged(s: android.text.Editable?) {}
             })
@@ -212,6 +216,30 @@ class MainActivity : Activity() {
         }
         categoryScroll.addView(categoryBar)
         root.addView(categoryScroll)
+
+        recentSection = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+        }
+        recentSection.addView(TextView(this).apply {
+            text = "RÉCEMMENT OUVERTES"
+            textSize = 10f
+            letterSpacing = 0.14f
+            setTextColor(muted)
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(0, dp(0), 0, dp(7))
+        })
+        val recentScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+        }
+        recentRail = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        recentScroll.addView(recentRail)
+        recentSection.addView(recentScroll, LinearLayout.LayoutParams(-1, dp(66)))
+        root.addView(recentSection, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
 
         val sectionHeader = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -262,6 +290,7 @@ class MainActivity : Activity() {
         setContentView(root)
         updateCategoryStyles()
         refreshGrid()
+        buildRecentRail()
         grid.requestFocus()
     }
 
@@ -316,6 +345,41 @@ class MainActivity : Activity() {
         emptyLabel.visibility = if (count == 0) View.VISIBLE else View.GONE
     }
 
+    private fun buildRecentRail() {
+        if (!::recentSection.isInitialized) return
+        recentRail.removeAllViews()
+        val items = recent.mapNotNull { key -> apps.firstOrNull { it.packageName == key } }.take(6)
+        recentSection.visibility = if (selectedCategory == AppCategory.ALL && searchQuery.isBlank() && items.isNotEmpty()) View.VISIBLE else View.GONE
+        items.forEach { app ->
+            val item = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                background = rounded(surface, dp(12))
+                isFocusable = true
+                isClickable = true
+                setPadding(dp(10), dp(6), dp(14), dp(6))
+                setOnClickListener { launchApp(app.packageName) }
+                setOnFocusChangeListener { view, focused ->
+                    view.background = rounded(if (focused) surfaceRaised else surface, dp(12)).apply {
+                        if (focused) setStroke(dp(2), accent)
+                    }
+                }
+            }
+            item.addView(ImageView(this).apply {
+                setImageDrawable(app.icon)
+                scaleType = ImageView.ScaleType.FIT_CENTER
+            }, LinearLayout.LayoutParams(dp(42), dp(42)))
+            item.addView(TextView(this).apply {
+                text = app.label
+                textSize = 12f
+                setTextColor(Color.WHITE)
+                maxLines = 1
+                setPadding(dp(8), 0, 0, 0)
+            })
+            recentRail.addView(item, LinearLayout.LayoutParams(-2, dp(56)).apply { marginEnd = dp(8) })
+        }
+    }
+
     private fun discoverApps(): List<TvApp> {
         val found = linkedMapOf<String, TvApp>()
         val intents = listOf(
@@ -358,13 +422,7 @@ class MainActivity : Activity() {
             "be.px.stbtvclient",
             "tv.threess.threeready.ui.generic.activity.MainActivity"
         )
-        runCatching {
-            startActivity(intent)
-            recent.remove(packageName)
-            recent.add(0, packageName)
-            while (recent.size > 10) recent.removeAt(recent.lastIndex)
-            prefs.edit().putString("recent", recent.joinToString("|")).apply()
-        }
+        runCatching { startActivity(intent) }
             .onFailure {
                 Toast.makeText(this, "Impossible d'ouvrir l'interface Proximus", Toast.LENGTH_SHORT).show()
             }
@@ -446,10 +504,16 @@ class MainActivity : Activity() {
             Toast.makeText(this, "Application non lançable", Toast.LENGTH_SHORT).show()
             return
         }
-        runCatching { startActivity(intent) }
-            .onFailure {
-                Toast.makeText(this, "Impossible d'ouvrir cette application", Toast.LENGTH_SHORT).show()
-            }
+        runCatching {
+            startActivity(intent)
+            recent.remove(packageName)
+            recent.add(0, packageName)
+            while (recent.size > 10) recent.removeAt(recent.lastIndex)
+            prefs.edit().putString("recent", recent.joinToString("|")).apply()
+            buildRecentRail()
+        }.onFailure {
+            Toast.makeText(this, "Impossible d'ouvrir cette application", Toast.LENGTH_SHORT).show()
+        }
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
