@@ -327,9 +327,6 @@ class MainActivity : Activity() {
             val widthDp = (resources.displayMetrics.widthPixels / resources.displayMetrics.density) - 290f
             numColumns = if (widthDp >= 1250f) 5 else 4
             isVerticalScrollBarEnabled = true
-            scrollbarStyle = View.SCROLLBARS_INSIDE_OVERLAY
-            smoothScrollBarEnabled = true
-            fadingEdgeLength = dp(24)
             overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
             horizontalSpacing = dp(14)
             verticalSpacing = dp(14)
