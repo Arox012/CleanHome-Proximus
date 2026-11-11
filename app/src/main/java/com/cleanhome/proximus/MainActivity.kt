@@ -12,13 +12,12 @@ import android.view.Gravity
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
-import android.widget.AbsListView
-import android.widget.BaseAdapter
+import android.widget.EditText
 import android.widget.FrameLayout
-import android.widget.GridView
 import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 
@@ -31,52 +30,41 @@ private data class TvApp(
 )
 
 private enum class AppCategory(val title: String) {
-    ALL("Découvrir"),
-    FAVORITES("Favoris"),
-    VIDEO("Films & séries"),
-    MUSIC("Musique"),
-    GAMES("Jeux"),
-    OTHER("Applications")
+    ALL("Accueil"), FAVORITES("Ma liste"), VIDEO("Films et séries"),
+    MUSIC("Musique"), GAMES("Jeux"), OTHER("Applications")
 }
 
 class MainActivity : Activity() {
-    private val backgroundColor = Color.rgb(6, 8, 17)
-    private val surface = Color.rgb(16, 21, 36)
-    private val surfaceRaised = Color.rgb(37, 35, 65)
-    private val accent = Color.rgb(173, 139, 255)
-    private val muted = Color.rgb(164, 174, 198)
-    private val cyan = Color.rgb(105, 225, 207)
-
+    private val bg = Color.rgb(7, 9, 17)
+    private val panel = Color.rgb(19, 23, 35)
+    private val panelFocus = Color.rgb(42, 48, 66)
+    private val white = Color.WHITE
+    private val secondary = Color.rgb(166, 174, 190)
+    private val blue = Color.rgb(105, 166, 255)
     private val prefs by lazy { getSharedPreferences("vanta_settings", MODE_PRIVATE) }
     private val favorites = linkedSetOf<String>()
     private val recent = mutableListOf<String>()
-    private var searchQuery = ""
-    private var selectedCategory = AppCategory.ALL
-    private lateinit var grid: GridView
-    private lateinit var adapter: AppsAdapter
-    private lateinit var countLabel: TextView
-    private lateinit var emptyLabel: TextView
-    private lateinit var searchInput: android.widget.EditText
-    private lateinit var recentSection: LinearLayout
-    private lateinit var recentRail: LinearLayout
-    private val categoryButtons = mutableMapOf<AppCategory, TextView>()
     private var apps: List<TvApp> = emptyList()
-    private lateinit var clockLabel: TextView
+    private var selectedCategory = AppCategory.ALL
+    private var searchQuery = ""
+    private lateinit var root: LinearLayout
+    private lateinit var mainScroll: ScrollView
+    private lateinit var content: LinearLayout
+    private lateinit var search: EditText
+    private lateinit var clock: TextView
+    private lateinit var navButtons: Map<AppCategory, TextView>
     private val clockHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val clockTick = object : Runnable {
         override fun run() {
-            if (::clockLabel.isInitialized) {
-                clockLabel.text = java.text.SimpleDateFormat("HH:mm  •  EEEE d MMMM", java.util.Locale.FRENCH)
-                    .format(java.util.Date()).replaceFirstChar { it.uppercase() }
-            }
+            if (::clock.isInitialized) clock.text = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
             clockHandler.postDelayed(this, 30_000)
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor = backgroundColor
-        window.navigationBarColor = backgroundColor
+        window.statusBarColor = bg
+        window.navigationBarColor = bg
         window.decorView.systemUiVisibility = 0
         favorites.addAll(prefs.getStringSet("favorites", emptySet()) ?: emptySet())
         recent.addAll(prefs.getString("recent", "").orEmpty().split("|").filter { it.isNotBlank() })
@@ -92,389 +80,355 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        if (::grid.isInitialized) {
+        if (::content.isInitialized) {
             apps = discoverApps()
-            refreshGrid()
-            buildRecentRail()
+            renderHome()
         }
     }
 
     private fun buildInterface() {
-        categoryButtons.clear()
-
-        val root = LinearLayout(this).apply {
+        root = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(dp(30), dp(24), dp(30), dp(24))
-            background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(Color.rgb(9, 12, 27), Color.rgb(7, 10, 20), Color.rgb(15, 11, 29)))
-            isFocusable = false
+            setBackgroundColor(bg)
+            setPadding(dp(34), dp(24), dp(34), dp(18))
         }
 
-        // Navigation latérale fixe : les catégories restent toujours accessibles à la télécommande.
         val sidebar = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), dp(12), dp(12), dp(12))
-            background = rounded(surface, dp(22))
-        }
-        sidebar.addView(TextView(this).apply {
-            text = "VANTA"
-            textSize = 19f
-            letterSpacing = 0.22f
-            setTextColor(accent)
-            typeface = Typeface.DEFAULT_BOLD
-            setPadding(dp(8), dp(8), dp(8), dp(3))
-        })
-        sidebar.addView(TextView(this).apply {
-            text = "ENTERTAINMENT OS"
-            textSize = 9f
-            letterSpacing = 0.08f
-            setTextColor(muted)
-            setPadding(dp(8), 0, dp(8), dp(22))
-        })
-
-        val liveButton = makeActionButton("▶  TV EN DIRECT", cyan) { openProximus() }.apply {
-            textSize = 11f
-            minHeight = dp(48)
+            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
             setPadding(dp(8), dp(10), dp(8), dp(10))
         }
-        sidebar.addView(liveButton, LinearLayout.LayoutParams(-1, dp(48)))
-        sidebar.addView(View(this).apply { setBackgroundColor(Color.rgb(48, 51, 72)) },
-            LinearLayout.LayoutParams(-1, dp(1)).apply {
-                topMargin = dp(18)
-                bottomMargin = dp(14)
-            })
-
+        sidebar.addView(TextView(this).apply {
+            text = "V."
+            textSize = 30f
+            typeface = Typeface.create("sans-serif", Typeface.BOLD)
+            setTextColor(white)
+            gravity = Gravity.CENTER
+            letterSpacing = -0.06f
+        }, LinearLayout.LayoutParams(-1, dp(58)))
+        sidebar.addView(TextView(this).apply {
+            text = "VANTA"
+            textSize = 10f
+            letterSpacing = 0.22f
+            gravity = Gravity.CENTER
+            setTextColor(secondary)
+            setPadding(0, 0, 0, dp(34))
+        })
+        val buttons = linkedMapOf<AppCategory, TextView>()
         AppCategory.entries.forEach { category ->
-            val button = TextView(this).apply {
-                text = category.title
-                textSize = 13f
-                gravity = Gravity.CENTER_VERTICAL
-                isFocusable = true
-                isFocusableInTouchMode = true
-                isClickable = true
-                setPadding(dp(14), 0, dp(10), 0)
-                contentDescription = "Catégorie ${category.title}"
-                setOnClickListener { selectCategory(category, false) }
-                setOnFocusChangeListener { view, focused ->
-                    val active = selectedCategory == category
-                    view.background = when {
-                        focused -> rounded(surfaceRaised, dp(13)).apply { setStroke(dp(2), accent) }
-                        active -> rounded(Color.rgb(57, 43, 91), dp(13))
-                        else -> rounded(Color.TRANSPARENT, dp(13))
-                    }
-                    (view as TextView).setTextColor(if (focused || active) Color.WHITE else muted)
+            val item = TextView(this).apply {
+                text = when (category) {
+                    AppCategory.ALL -> "⌂"
+                    AppCategory.FAVORITES -> "♡"
+                    AppCategory.VIDEO -> "▣"
+                    AppCategory.MUSIC -> "♫"
+                    AppCategory.GAMES -> "⌘"
+                    AppCategory.OTHER -> "▦"
                 }
-                setOnKeyListener { _, keyCode, event ->
-                    if (event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                        focusFirstApp()
+                textSize = 25f
+                gravity = Gravity.CENTER
+                isFocusable = true
+                isClickable = true
+                contentDescription = category.title
+                background = rounded(Color.TRANSPARENT, 18)
+                setTextColor(secondary)
+                setOnClickListener { selectCategory(category) }
+                setOnFocusChangeListener { v, focused ->
+                    v.background = rounded(if (focused || selectedCategory == category) panelFocus else Color.TRANSPARENT, 18)
+                    (v as TextView).setTextColor(if (focused || selectedCategory == category) white else secondary)
+                    if (focused) selectCategory(category)
+                }
+                setOnKeyListener { _, key, event ->
+                    if (event.action == KeyEvent.ACTION_DOWN && key == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                        firstContentFocus()
                         true
                     } else false
                 }
             }
-            categoryButtons[category] = button
-            sidebar.addView(button, LinearLayout.LayoutParams(-1, dp(48)).apply {
-                bottomMargin = dp(5)
-            })
+            buttons[category] = item
+            sidebar.addView(item, LinearLayout.LayoutParams(dp(58), dp(54)).apply { bottomMargin = dp(8) })
         }
+        navButtons = buttons
         sidebar.addView(View(this), LinearLayout.LayoutParams(1, 0, 1f))
         sidebar.addView(TextView(this).apply {
-            text = "VANTA TV  •  NAVIGATION"
-            textSize = 8f
-            letterSpacing = 0.04f
-            setTextColor(Color.rgb(105, 115, 139))
-            setPadding(dp(8), dp(12), dp(8), dp(4))
-        })
-        root.addView(sidebar, LinearLayout.LayoutParams(dp(204), -1))
+            text = "●"
+            textSize = 12f
+            gravity = Gravity.CENTER
+            setTextColor(Color.rgb(90, 196, 154))
+        }, LinearLayout.LayoutParams(dp(58), dp(40)))
+        root.addView(sidebar, LinearLayout.LayoutParams(dp(78), -1))
 
-        val main = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(28), dp(4), dp(4), dp(2))
-        }
-
+        val right = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(8), 0, dp(10), dp(14))
         }
         header.addView(TextView(this).apply {
-            text = "VOTRE ESPACE"
-            textSize = 11f
-            letterSpacing = 0.15f
-            setTextColor(muted)
-            typeface = Typeface.DEFAULT_BOLD
+            text = when (selectedCategory) {
+                AppCategory.ALL -> "Regarder"
+                else -> selectedCategory.title
+            }
+            textSize = 25f
+            typeface = Typeface.create("sans-serif", Typeface.BOLD)
+            setTextColor(white)
         }, LinearLayout.LayoutParams(0, -2, 1f))
-        clockLabel = TextView(this).apply {
-            textSize = 12f
-            setTextColor(muted)
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, 0, dp(8), 0)
-        }
-        header.addView(clockLabel)
-        main.addView(header)
-
-        val hero = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            background = rounded(
-                intArrayOf(Color.rgb(58, 35, 105), Color.rgb(24, 47, 76), Color.rgb(15, 67, 73)),
-                dp(20)
-            )
-            setPadding(dp(22), dp(15), dp(20), dp(15))
-        }
-        val heroText = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        heroText.addView(TextView(this).apply {
-            text = "VANTA  /  YOUR ENTERTAINMENT"
-            textSize = 9f
-            letterSpacing = 0.14f
-            setTextColor(cyan)
-            typeface = Typeface.DEFAULT_BOLD
-        })
-        heroText.addView(TextView(this).apply {
-            text = "Votre univers. Une seule interface."
-            textSize = 19f
-            setTextColor(Color.WHITE)
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            setPadding(0, dp(5), 0, 0)
-        })
-        heroText.addView(TextView(this).apply {
-            text = "TV en direct, streaming, jeux et applications réunis."
-            textSize = 11f
-            setTextColor(muted)
-            setPadding(0, dp(4), 0, 0)
-        })
-        hero.addView(heroText, LinearLayout.LayoutParams(0, -2, 1f))
-        countLabel = TextView(this).apply {
-            textSize = 12f
-            setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER
-            background = rounded(Color.rgb(44, 53, 77), dp(12))
-            setPadding(dp(13), dp(9), dp(13), dp(9))
-        }
-        hero.addView(countLabel)
-        main.addView(hero, LinearLayout.LayoutParams(-1, -2).apply {
-            topMargin = dp(16)
-        })
-
-        searchInput = android.widget.EditText(this).apply {
-            hint = "⌕   Rechercher une application..."
+        search = EditText(this).apply {
+            hint = "Rechercher"
             textSize = 13f
-            setSingleLine(true)
-            setTextColor(Color.WHITE)
-            setHintTextColor(muted)
-            setPadding(dp(16), 0, dp(16), 0)
-            background = rounded(surface, dp(12)).apply { setStroke(dp(1), Color.rgb(43, 49, 69)) }
+            singleLine = true
+            setTextColor(white)
+            setHintTextColor(secondary)
+            setPadding(dp(14), 0, dp(14), 0)
+            background = rounded(panel, dp(20))
             addTextChangedListener(object : android.text.TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
                 override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                     searchQuery = s?.toString()?.trim().orEmpty()
-                    refreshGrid()
-                    if (::recentSection.isInitialized) buildRecentRail()
+                    renderHome()
                 }
                 override fun afterTextChanged(s: android.text.Editable?) {}
             })
         }
-        main.addView(searchInput, LinearLayout.LayoutParams(dp(360), dp(42)).apply {
-            topMargin = dp(12)
-        })
-
-        recentSection = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            visibility = View.GONE
+        header.addView(search, LinearLayout.LayoutParams(dp(210), dp(42)))
+        clock = TextView(this).apply {
+            textSize = 16f
+            setTextColor(white)
+            gravity = Gravity.CENTER
+            setPadding(dp(20), 0, dp(8), 0)
         }
-        recentSection.addView(TextView(this).apply {
-            text = "REPRENDRE  /  RÉCEMMENT OUVERTES"
-            textSize = 9f
-            letterSpacing = 0.13f
-            setTextColor(muted)
-            typeface = Typeface.DEFAULT_BOLD
-            setPadding(0, 0, 0, dp(6))
+        header.addView(clock)
+        right.addView(header)
+
+        mainScroll = ScrollView(this).apply {
+            isFillViewport = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+            descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+            clipToPadding = false
+        }
+        content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(8), dp(2), dp(12), dp(30))
+        }
+        mainScroll.addView(content)
+        right.addView(mainScroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        root.addView(right, LinearLayout.LayoutParams(0, -1, 1f))
+        setContentView(root)
+        renderHome()
+        navButtons[AppCategory.ALL]?.requestFocus()
+    }
+
+    private fun selectCategory(category: AppCategory) {
+        if (selectedCategory == category && content.childCount > 0) return
+        selectedCategory = category
+        navButtons.forEach { (key, view) ->
+            view.background = rounded(if (key == category) panelFocus else Color.TRANSPARENT, 18)
+            view.setTextColor(if (key == category) white else secondary)
+        }
+        renderHome()
+    }
+
+    private fun renderHome() {
+        if (!::content.isInitialized) return
+        content.removeAllViews()
+        if (searchQuery.isBlank() && selectedCategory == AppCategory.ALL) {
+            content.addView(buildHero(), LinearLayout.LayoutParams(-1, dp(290)).apply { bottomMargin = dp(26) })
+            val recently = recent.mapNotNull { key -> apps.firstOrNull { it.packageName == key } }.distinctBy { it.packageName }
+            if (recently.isNotEmpty()) addRail("Reprendre", recently)
+            val favs = apps.filter { favorites.contains(it.packageName) }
+            if (favs.isNotEmpty()) addRail("Ma liste", favs)
+            addRail("Vos applications", apps)
+            addRail("Films et séries", apps.filter { it.category == AppCategory.VIDEO })
+            addRail("Jeux", apps.filter { it.category == AppCategory.GAMES })
+            addRail("Musique", apps.filter { it.category == AppCategory.MUSIC })
+            addRail("Autres applications", apps.filter { it.category == AppCategory.OTHER })
+        } else {
+            val filtered = when (selectedCategory) {
+                AppCategory.ALL -> apps
+                AppCategory.FAVORITES -> apps.filter { favorites.contains(it.packageName) }
+                else -> apps.filter { it.category == selectedCategory }
+            }.filter { searchQuery.isBlank() || it.label.contains(searchQuery, true) || it.packageName.contains(searchQuery, true) }
+            content.addView(TextView(this).apply {
+                text = if (searchQuery.isNotBlank()) "Résultats de recherche" else selectedCategory.title
+                textSize = 22f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(white)
+                setPadding(dp(4), dp(12), 0, dp(16))
+            })
+            addRail("", filtered)
+            if (filtered.isEmpty()) content.addView(TextView(this).apply {
+                text = "Aucune application trouvée"
+                textSize = 15f
+                setTextColor(secondary)
+                setPadding(dp(6), dp(24), 0, 0)
+            })
+        }
+    }
+
+    private fun buildHero(): View {
+        val hero = FrameLayout(this).apply {
+            background = GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                intArrayOf(Color.rgb(37, 57, 91), Color.rgb(24, 37, 62), Color.rgb(13, 19, 32))).apply {
+                cornerRadius = dp(22).toFloat()
+            }
+            clipToOutline = true
+            setPadding(dp(34), dp(26), dp(30), dp(24))
+        }
+        val glow = View(this).apply {
+            background = GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                intArrayOf(Color.argb(100, 83, 143, 230), Color.argb(8, 80, 120, 210))).apply {
+                shape = GradientDrawable.OVAL
+            }
+        }
+        hero.addView(glow, FrameLayout.LayoutParams(dp(360), dp(360), Gravity.RIGHT or Gravity.CENTER_VERTICAL).apply {
+            rightMargin = dp(-70)
         })
-        val recentScroll = HorizontalScrollView(this).apply {
+        val copy = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        copy.addView(TextView(this).apply {
+            text = "VANTA  •  ESPACE DE DIVERTISSEMENT"
+            textSize = 10f
+            letterSpacing = 0.18f
+            setTextColor(Color.rgb(190, 211, 245))
+            typeface = Typeface.DEFAULT_BOLD
+        })
+        copy.addView(TextView(this).apply {
+            text = "Tout votre\n divertissement.\nAu même endroit."
+            textSize = 31f
+            lineSpacing = dp(1).toFloat()
+            typeface = Typeface.create("sans-serif", Typeface.BOLD)
+            setTextColor(white)
+            setPadding(0, dp(10), 0, dp(8))
+        })
+        copy.addView(TextView(this).apply {
+            text = "Retrouvez vos applications et lancez Proximus TV en un instant."
+            textSize = 13f
+            setTextColor(Color.rgb(206, 215, 230))
+            maxLines = 2
+        })
+        val actions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(20), 0, 0)
+        }
+        actions.addView(actionButton("▶   Regarder la TV", true) { openProximus() },
+            LinearLayout.LayoutParams(-2, dp(46)).apply { marginEnd = dp(12) })
+        actions.addView(actionButton("Explorer les apps", false) {
+            selectCategory(AppCategory.OTHER)
+        }, LinearLayout.LayoutParams(-2, dp(46)))
+        copy.addView(actions)
+        hero.addView(copy, FrameLayout.LayoutParams(dp(650), -1, Gravity.LEFT or Gravity.CENTER_VERTICAL))
+        hero.isFocusable = false
+        return hero
+    }
+
+    private fun addRail(title: String, items: List<TvApp>) {
+        if (items.isEmpty()) return
+        if (title.isNotBlank()) content.addView(TextView(this).apply {
+            text = title
+            textSize = 19f
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            setTextColor(white)
+            setPadding(dp(4), dp(3), 0, dp(12))
+        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(2) })
+        val horizontal = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
             overScrollMode = View.OVER_SCROLL_NEVER
             descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+            clipToPadding = false
         }
-        recentRail = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        recentScroll.addView(recentRail)
-        recentSection.addView(recentScroll, LinearLayout.LayoutParams(-1, dp(62)))
-        main.addView(recentSection, LinearLayout.LayoutParams(-1, -2).apply {
-            topMargin = dp(12)
-            bottomMargin = dp(8)
-        })
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        items.forEach { app -> row.addView(appCard(app), LinearLayout.LayoutParams(dp(206), dp(158)).apply {
+            marginEnd = dp(14)
+            bottomMargin = dp(19)
+        }) }
+        horizontal.addView(row)
+        content.addView(horizontal, LinearLayout.LayoutParams(-1, dp(174)))
+    }
 
-        val sectionHeader = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, dp(10), 0, dp(10))
-        }
-        sectionHeader.addView(TextView(this).apply {
-            text = "APPLICATIONS"
-            textSize = 10f
-            letterSpacing = 0.14f
-            setTextColor(muted)
-            typeface = Typeface.DEFAULT_BOLD
-        }, LinearLayout.LayoutParams(0, -2, 1f))
-        sectionHeader.addView(TextView(this).apply {
-            text = "OK : OUVRIR   •   MAINTENIR : FAVORI"
-            textSize = 9f
-            setTextColor(Color.rgb(111, 122, 147))
-        })
-        main.addView(sectionHeader)
-
-        val content = FrameLayout(this)
-        grid = GridView(this).apply {
-            val widthDp = (resources.displayMetrics.widthPixels / resources.displayMetrics.density) - 290f
-            numColumns = if (widthDp >= 1250f) 5 else 4
-            isVerticalScrollBarEnabled = true
-            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
-            horizontalSpacing = dp(14)
-            verticalSpacing = dp(14)
-            stretchMode = GridView.STRETCH_COLUMN_WIDTH
-            selector = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
+    private fun appCard(app: TvApp): View {
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
             isFocusable = true
             isFocusableInTouchMode = true
-            descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
-            clipToPadding = false
-            setPadding(0, dp(4), 0, dp(8))
-            setOnKeyListener { _, keyCode, event ->
-                if (event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                    val position = selectedItemPosition
-                    if (position >= 0 && position % numColumns == 0) {
-                        categoryButtons[selectedCategory]?.requestFocus()
-                        true
-                    } else false
-                } else false
+            isClickable = true
+            background = rounded(panel, dp(15))
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            contentDescription = "Ouvrir ${app.label}. Appui long pour ajouter ou retirer des favoris."
+        }
+        val art = FrameLayout(this).apply {
+            background = GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                intArrayOf(Color.rgb(37, 47, 67), Color.rgb(20, 27, 42))).apply { cornerRadius = dp(10).toFloat() }
+        }
+        art.addView(ImageView(this).apply {
+            setImageDrawable(app.icon)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            setPadding(dp(22), dp(10), dp(22), dp(10))
+        }, FrameLayout.LayoutParams(-1, -1))
+        card.addView(art, LinearLayout.LayoutParams(-1, dp(94)))
+        card.addView(TextView(this).apply {
+            text = app.label
+            textSize = 12f
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            gravity = Gravity.CENTER
+            setTextColor(white)
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            setPadding(0, dp(8), 0, 0)
+        }, LinearLayout.LayoutParams(-1, -2))
+        card.setOnClickListener { launchApp(app.packageName) }
+        card.setOnLongClickListener {
+            if (!favorites.add(app.packageName)) favorites.remove(app.packageName)
+            prefs.edit().putStringSet("favorites", favorites.toSet()).apply()
+            Toast.makeText(this, if (favorites.contains(app.packageName)) "Ajouté à Ma liste" else "Retiré de Ma liste", Toast.LENGTH_SHORT).show()
+            renderHome()
+            true
+        }
+        card.setOnFocusChangeListener { view, focused ->
+            view.background = rounded(if (focused) panelFocus else panel, dp(15))
+            view.animate().scaleX(if (focused) 1.07f else 1f).scaleY(if (focused) 1.07f else 1f)
+                .setDuration(170).start()
+            view.elevation = if (focused) dp(12).toFloat() else 0f
+            if (focused) view.parent?.let { parent ->
+                (parent as? HorizontalScrollView)?.smoothScrollTo(view.left - dp(24), 0)
             }
         }
-        adapter = AppsAdapter()
-        grid.adapter = adapter
-        content.addView(grid, FrameLayout.LayoutParams(-1, -1))
-
-        emptyLabel = TextView(this).apply {
-            text = "Aucune application dans cette catégorie."
-            textSize = 14f
-            setTextColor(muted)
-            gravity = Gravity.CENTER
-            visibility = View.GONE
+        card.setOnKeyListener { _, key, event ->
+            if (event.action == KeyEvent.ACTION_DOWN && key == KeyEvent.KEYCODE_DPAD_UP) {
+                mainScroll.smoothScrollBy(0, -dp(220))
+                false
+            } else false
         }
-        content.addView(emptyLabel, FrameLayout.LayoutParams(-1, -1))
-        main.addView(content, LinearLayout.LayoutParams(-1, 0, 1f))
-
-        root.addView(main, LinearLayout.LayoutParams(0, -1, 1f))
-        setContentView(root)
-        updateCategoryStyles()
-        refreshGrid()
-        buildRecentRail()
-        categoryButtons[selectedCategory]?.requestFocus()
+        return card
     }
 
-    private fun selectCategory(category: AppCategory, moveToGrid: Boolean) {
-        selectedCategory = category
-        updateCategoryStyles()
-        refreshGrid()
-        buildRecentRail()
-        if (moveToGrid) focusFirstApp()
+    private fun firstContentFocus() {
+        val scroll = content.getChildAt(1) as? HorizontalScrollView
+        val row = scroll?.getChildAt(0) as? ViewGroup
+        row?.getChildAt(0)?.requestFocus() ?: search.requestFocus()
     }
 
-    private fun focusFirstApp() {
-        if (::grid.isInitialized && adapter.count > 0) {
-            grid.setSelection(0)
-            grid.post { grid.getChildAt(0)?.requestFocus() ?: grid.requestFocus() }
-        } else if (::searchInput.isInitialized) {
-            searchInput.requestFocus()
-        }
-    }
-
-    private fun makeActionButton(title: String, color: Int, action: () -> Unit): TextView =
+    private fun actionButton(label: String, primary: Boolean, action: () -> Unit) =
         TextView(this).apply {
-            text = title
+            text = label
             textSize = 13f
-            letterSpacing = 0.06f
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
-            setTextColor(Color.BLACK)
-            background = rounded(color, dp(15))
+            setPadding(dp(18), 0, dp(18), 0)
+            setTextColor(if (primary) Color.rgb(10, 18, 30) else white)
+            background = rounded(if (primary) white else Color.argb(55, 255, 255, 255), dp(24))
             isFocusable = true
             isClickable = true
-            setPadding(dp(22), dp(13), dp(22), dp(13))
             setOnClickListener { action() }
-            setOnFocusChangeListener { view, focused ->
-                view.background = rounded(if (focused) Color.WHITE else color, dp(15))
-                (view as TextView).setTextColor(Color.BLACK)
-                view.animate().scaleX(if (focused) 1.045f else 1f).scaleY(if (focused) 1.045f else 1f).setDuration(160).start()
+            setOnFocusChangeListener { v, focused ->
+                v.scaleX = if (focused) 1.04f else 1f
+                v.scaleY = if (focused) 1.04f else 1f
+                v.elevation = if (focused) dp(8).toFloat() else 0f
             }
         }
-
-    private fun updateCategoryStyles() {
-        categoryButtons.forEach { (category, view) ->
-            val active = selectedCategory == category
-            val focused = view.hasFocus()
-            view.background = when {
-                focused -> rounded(surfaceRaised, dp(13)).apply { setStroke(dp(2), accent) }
-                active -> rounded(Color.rgb(57, 43, 91), dp(13))
-                else -> rounded(Color.TRANSPARENT, dp(13))
-            }
-            view.setTextColor(if (focused || active) Color.WHITE else muted)
-        }
-    }
-
-    private fun visibleApps(): List<TvApp> {
-        val categoryApps = when (selectedCategory) {
-            AppCategory.ALL -> apps
-            AppCategory.FAVORITES -> apps.filter { favorites.contains(it.packageName) }
-            else -> apps.filter { it.category == selectedCategory }
-        }
-        val filtered = if (searchQuery.isBlank()) categoryApps else categoryApps.filter {
-            it.label.contains(searchQuery, ignoreCase = true) || it.packageName.contains(searchQuery, ignoreCase = true)
-        }
-        return if (selectedCategory == AppCategory.ALL && searchQuery.isBlank())
-            filtered.sortedWith(compareByDescending<TvApp> { favorites.contains(it.packageName) }.thenBy { it.label.lowercase() })
-        else filtered.sortedBy { it.label.lowercase() }
-    }
-
-    private fun refreshGrid() {
-        if (!::adapter.isInitialized) return
-        adapter.notifyDataSetChanged()
-        val count = visibleApps().size
-        countLabel.text = count.toString() + " application" + if (count > 1) "s" else ""
-        emptyLabel.visibility = if (count == 0) View.VISIBLE else View.GONE
-    }
-
-    private fun buildRecentRail() {
-        if (!::recentSection.isInitialized) return
-        recentRail.removeAllViews()
-        val items = recent.mapNotNull { key -> apps.firstOrNull { it.packageName == key } }.take(6)
-        recentSection.visibility = if (selectedCategory == AppCategory.ALL && searchQuery.isBlank() && items.isNotEmpty()) View.VISIBLE else View.GONE
-        items.forEach { app ->
-            val item = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                background = rounded(surface, dp(12))
-                isFocusable = true
-                isClickable = true
-                setPadding(dp(10), dp(6), dp(14), dp(6))
-                setOnClickListener { launchApp(app.packageName) }
-                setOnFocusChangeListener { view, focused ->
-                    view.background = rounded(if (focused) surfaceRaised else surface, dp(12)).apply {
-                        if (focused) setStroke(dp(2), accent)
-                    }
-                }
-            }
-            item.addView(ImageView(this).apply {
-                setImageDrawable(app.icon)
-                scaleType = ImageView.ScaleType.FIT_CENTER
-            }, LinearLayout.LayoutParams(dp(42), dp(42)))
-            item.addView(TextView(this).apply {
-                text = app.label
-                textSize = 12f
-                setTextColor(Color.WHITE)
-                maxLines = 1
-                setPadding(dp(8), 0, 0, 0)
-            })
-            recentRail.addView(item, LinearLayout.LayoutParams(-2, dp(56)).apply { marginEnd = dp(8) })
-        }
-    }
 
     private fun discoverApps(): List<TvApp> {
         val found = linkedMapOf<String, TvApp>()
@@ -483,200 +437,64 @@ class MainActivity : Activity() {
             Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         )
         intents.forEach { intent ->
-            val results = if (Build.VERSION.SDK_INT >= 33) {
-                packageManager.queryIntentActivities(intent, PackageManager.ResolveInfoFlags.of(0))
-            } else {
+            val results = if (Build.VERSION.SDK_INT >= 33) packageManager.queryIntentActivities(intent, PackageManager.ResolveInfoFlags.of(0))
+            else {
                 @Suppress("DEPRECATION")
                 packageManager.queryIntentActivities(intent, 0)
             }
-            val isTvIntent = intent.hasCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
+            val tv = intent.hasCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
             results.forEach resultLoop@{ info ->
-                val packageName = info.activityInfo?.packageName ?: return@resultLoop
-                if (packageName == packageNameOfSelf()) return@resultLoop
-                // Hide the stock YouTube client in VANTA; SmartTube remains visible.
-                if (packageName.lowercase().contains("youtube") && !packageName.lowercase().contains("smarttube")) return@resultLoop
+                val pkg = info.activityInfo?.packageName ?: return@resultLoop
+                if (pkg == packageName) return@resultLoop
+                if (pkg.lowercase().contains("youtube") && !pkg.lowercase().contains("smarttube")) return@resultLoop
                 val label = info.loadLabel(packageManager)?.toString()?.trim().orEmpty()
                 if (label.isBlank()) return@resultLoop
                 val icon = runCatching { info.loadIcon(packageManager) }.getOrNull() ?: return@resultLoop
-                val existing = found[packageName]
-                if (existing == null) {
-                    found[packageName] = TvApp(label, packageName, icon, categorize(packageName, label), isTvIntent)
-                } else if (isTvIntent && !existing.tvCompatible) {
-                    found[packageName] = existing.copy(tvCompatible = true)
-                }
+                val old = found[pkg]
+                if (old == null) found[pkg] = TvApp(label, pkg, icon, categorize(pkg, label), tv)
+                else if (tv && !old.tvCompatible) found[pkg] = old.copy(tvCompatible = true)
             }
         }
         return found.values.sortedBy { it.label.lowercase() }
     }
 
-    private fun packageNameOfSelf() = applicationContext.packageName
-
-    private fun categorize(packageName: String, label: String): AppCategory {
-        val value = "$packageName $label".lowercase()
+    private fun categorize(pkg: String, label: String): AppCategory {
+        val value = "$pkg $label".lowercase()
         return when {
-            listOf("youtube", "netflix", "disney", "crunchy", "primevideo", "prime video", "plex", "twitch", "auvio", "rtl", "tvi", "f1", "stb", "proximus").any(value::contains) -> AppCategory.VIDEO
+            listOf("youtube", "netflix", "disney", "crunchy", "primevideo", "plex", "twitch", "auvio", "rtl", "tvi", "f1", "stb", "proximus", "vlc", "tvbro", "smarttube").any(value::contains) -> AppCategory.VIDEO
             listOf("spotify", "music", "deezer", "soundcloud", "radio").any(value::contains) -> AppCategory.MUSIC
-            listOf("game", "geforce", "steam", "xbox", "playstation", "retroarch", "emulator").any(value::contains) -> AppCategory.GAMES
+            listOf("game", "geforce", "steam", "xbox", "retroarch", "emulator", "bombsquad", "sonic").any(value::contains) -> AppCategory.GAMES
             else -> AppCategory.OTHER
         }
     }
 
-    /**
-     * VANTA replaces only the HOME screen. The Proximus TV client stays installed
-     * and is launched directly through its known main activity.
-     */
     private fun openProximus() {
-        val intent = Intent().setClassName(
-            "be.px.stbtvclient",
-            "tv.threess.threeready.ui.generic.activity.MainActivity"
-        )
+        val intent = Intent().setClassName("be.px.stbtvclient", "tv.threess.threeready.ui.generic.activity.MainActivity")
         runCatching {
             startActivity(intent)
             rememberRecent("be.px.stbtvclient")
         }.onFailure {
             val fallback = packageManager.getLaunchIntentForPackage("be.px.stbtvclient")
-            if (fallback != null) {
-                runCatching {
-                    startActivity(fallback)
-                    rememberRecent("be.px.stbtvclient")
-                }.onFailure {
-                    Toast.makeText(this, "L'application Proximus TV ne peut pas être ouverte.", Toast.LENGTH_LONG).show()
-                }
-            } else {
-                Toast.makeText(this, "Proximus TV est introuvable. Ne désinstallez pas l'application Proximus.", Toast.LENGTH_LONG).show()
-            }
+            if (fallback != null) runCatching { startActivity(fallback); rememberRecent("be.px.stbtvclient") }
+            else Toast.makeText(this, "Proximus TV est introuvable. Ne désinstallez pas l'application Proximus.", Toast.LENGTH_LONG).show()
         }
     }
 
-    private fun rememberRecent(packageName: String) {
-        recent.remove(packageName)
-        recent.add(0, packageName)
+    private fun rememberRecent(pkg: String) {
+        recent.remove(pkg)
+        recent.add(0, pkg)
         while (recent.size > 10) recent.removeAt(recent.lastIndex)
         prefs.edit().putString("recent", recent.joinToString("|")).apply()
-        buildRecentRail()
     }
 
-    private fun rounded(color: Int, radius: Int) = GradientDrawable().apply {
-        setColor(color)
-        cornerRadius = radius.toFloat()
-    }
-
-    private fun rounded(colors: IntArray, radius: Int) = GradientDrawable(
-        GradientDrawable.Orientation.LEFT_RIGHT, colors
-    ).apply {
-        cornerRadius = radius.toFloat()
-    }
-
-    private fun dp(value: Int): Int =
-        (value * resources.displayMetrics.density).toInt()
-
-    private inner class AppsAdapter : BaseAdapter() {
-        override fun getCount() = visibleApps().size
-        override fun getItem(position: Int) = visibleApps()[position]
-        override fun getItemId(position: Int) = getItem(position).packageName.hashCode().toLong()
-
-        override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-            val app = getItem(position)
-            val card = (convertView as? LinearLayout) ?: createAppCard()
-            card.findViewWithTag<ImageView>("app_icon").setImageDrawable(app.icon)
-            card.findViewWithTag<TextView>("app_label").text = app.label
-            card.findViewWithTag<TextView>("app_favorite").text = when {
-                favorites.contains(app.packageName) -> "★ FAVORI"
-                !app.tvCompatible -> "APP ANDROID • NON TV"
-                else -> "APPLICATION TV"
-            }
-            card.contentDescription = "Ouvrir ${app.label}. ${if (app.tvCompatible) "Compatible TV" else "Application Android non optimisée TV"}. Appui long pour gérer les favoris."
-            card.setOnClickListener { launchApp(app.packageName) }
-            card.setOnKeyListener { _, keyCode, event ->
-                if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
-                when (keyCode) {
-                    KeyEvent.KEYCODE_DPAD_LEFT -> {
-                        if (position % grid.numColumns == 0) {
-                            categoryButtons[selectedCategory]?.requestFocus()
-                            true
-                        } else false
-                    }
-                    KeyEvent.KEYCODE_DPAD_UP -> {
-                        if (position < grid.numColumns) {
-                            if (recentSection.visibility == View.VISIBLE && recentRail.childCount > 0) {
-                                recentRail.getChildAt(0)?.requestFocus()
-                            } else {
-                                searchInput.requestFocus()
-                            }
-                            true
-                        } else false
-                    }
-                    else -> false
-                }
-            }
-            card.setOnFocusChangeListener { view, focused ->
-                view.background = if (focused) rounded(surfaceRaised, dp(17)).apply { setStroke(dp(2), accent) } else rounded(surface, dp(17))
-                view.animate().scaleX(if (focused) 1.055f else 1f).scaleY(if (focused) 1.055f else 1f).setDuration(170).start()
-                view.elevation = if (focused) dp(10).toFloat() else 0f
-                if (focused) {
-                    grid.post { grid.smoothScrollToPosition(position) }
-                }
-            }
-            card.setOnLongClickListener {
-                if (!favorites.add(app.packageName)) favorites.remove(app.packageName)
-                prefs.edit().putStringSet("favorites", favorites.toSet()).apply()
-                Toast.makeText(this@MainActivity, if (favorites.contains(app.packageName)) "Ajouté aux favoris" else "Retiré des favoris", Toast.LENGTH_SHORT).show()
-                refreshGrid()
-                true
-            }
-            return card
-        }
-
-        private fun createAppCard() = LinearLayout(this@MainActivity).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            isFocusable = true
-            isFocusableInTouchMode = true
-            isClickable = true
-            setPadding(dp(10), dp(16), dp(10), dp(14))
-            layoutParams = AbsListView.LayoutParams(-1, dp(154))
-            background = rounded(surface, dp(17))
-
-            addView(ImageView(this@MainActivity).apply {
-                tag = "app_icon"
-                scaleType = ImageView.ScaleType.FIT_CENTER
-            }, LinearLayout.LayoutParams(dp(68), dp(68)))
-
-            addView(TextView(this@MainActivity).apply {
-                tag = "app_label"
-                textSize = 13f
-                gravity = Gravity.CENTER
-                maxLines = 2
-                ellipsize = android.text.TextUtils.TruncateAt.END
-                setTextColor(Color.WHITE)
-                setPadding(0, dp(10), 0, 0)
-                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            }, LinearLayout.LayoutParams(-1, -2))
-
-            addView(TextView(this@MainActivity).apply {
-                tag = "app_favorite"
-                textSize = 8f
-                letterSpacing = 0.05f
-                gravity = Gravity.CENTER
-                setTextColor(accent)
-                setPadding(0, dp(4), 0, 0)
-            }, LinearLayout.LayoutParams(-1, -2))
-
-        }
-    }
-
-    private fun launchApp(packageName: String) {
-        val intent = packageManager.getLaunchIntentForPackage(packageName)
+    private fun launchApp(pkg: String) {
+        val intent = packageManager.getLaunchIntentForPackage(pkg)
         if (intent == null) {
             Toast.makeText(this, "Application non lançable", Toast.LENGTH_SHORT).show()
             return
         }
-        runCatching {
-            startActivity(intent)
-            rememberRecent(packageName)
-        }.onFailure {
-            Toast.makeText(this, "Impossible d'ouvrir cette application", Toast.LENGTH_SHORT).show()
-        }
+        runCatching { startActivity(intent); rememberRecent(pkg) }
+            .onFailure { Toast.makeText(this, "Impossible d'ouvrir cette application", Toast.LENGTH_SHORT).show() }
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
@@ -685,18 +503,20 @@ class MainActivity : Activity() {
             return true
         }
         if (keyCode == KeyEvent.KEYCODE_BACK && searchQuery.isNotBlank()) {
-            if (::searchInput.isInitialized) searchInput.setText("")
-            searchQuery = ""
-            refreshGrid()
-            buildRecentRail()
+            search.setText("")
             return true
         }
         if (keyCode == KeyEvent.KEYCODE_BACK && selectedCategory != AppCategory.ALL) {
-            selectedCategory = AppCategory.ALL
-            updateCategoryStyles()
-            refreshGrid()
+            selectCategory(AppCategory.ALL)
             return true
         }
         return super.onKeyDown(keyCode, event)
     }
+
+    private fun rounded(color: Int, radius: Int) = GradientDrawable().apply {
+        setColor(color)
+        cornerRadius = radius.toFloat()
+    }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 }
