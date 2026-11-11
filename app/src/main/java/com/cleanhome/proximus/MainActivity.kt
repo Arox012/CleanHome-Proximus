@@ -20,6 +20,9 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 private data class TvApp(
     val label: String,
@@ -29,43 +32,59 @@ private data class TvApp(
     val tvCompatible: Boolean
 )
 
-private enum class AppCategory(val title: String) {
-    ALL("Accueil"), FAVORITES("Ma liste"), VIDEO("Films et séries"),
-    MUSIC("Musique"), GAMES("Jeux"), OTHER("Applications")
+private enum class AppCategory(val title: String, val symbol: String) {
+    ALL("Accueil", "⌂"),
+    FAVORITES("Ma liste", "♡"),
+    VIDEO("Films et séries", "▣"),
+    MUSIC("Musique", "♫"),
+    GAMES("Jeux", "⌘"),
+    OTHER("Applications", "▦")
 }
 
 class MainActivity : Activity() {
-    private val bg = Color.rgb(7, 9, 17)
-    private val panel = Color.rgb(19, 23, 35)
-    private val panelFocus = Color.rgb(42, 48, 66)
-    private val white = Color.WHITE
-    private val secondary = Color.rgb(166, 174, 190)
-    private val blue = Color.rgb(105, 166, 255)
+    private val backgroundColor = Color.rgb(7, 9, 16)
+    private val surfaceColor = Color.rgb(21, 25, 36)
+    private val focusedColor = Color.rgb(47, 55, 73)
+    private val primaryText = Color.rgb(250, 251, 255)
+    private val mutedText = Color.rgb(165, 174, 192)
+    private val accent = Color.rgb(115, 170, 255)
+
     private val prefs by lazy { getSharedPreferences("vanta_settings", MODE_PRIVATE) }
     private val favorites = linkedSetOf<String>()
     private val recent = mutableListOf<String>()
     private var apps: List<TvApp> = emptyList()
     private var selectedCategory = AppCategory.ALL
     private var searchQuery = ""
-    private lateinit var root: LinearLayout
+    private var firstResume = true
+
     private lateinit var mainScroll: ScrollView
     private lateinit var content: LinearLayout
     private lateinit var search: EditText
     private lateinit var clock: TextView
+    private lateinit var date: TextView
+    private lateinit var sidebar: LinearLayout
     private lateinit var navButtons: Map<AppCategory, TextView>
+
     private val clockHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val clockTick = object : Runnable {
         override fun run() {
-            if (::clock.isInitialized) clock.text = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
+            if (::clock.isInitialized) clock.text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
+            if (::date.isInitialized) date.text = SimpleDateFormat("EEEE d MMMM", Locale.getDefault()).format(Date())
             clockHandler.postDelayed(this, 30_000)
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor = bg
-        window.navigationBarColor = bg
-        window.decorView.systemUiVisibility = 0
+        window.statusBarColor = backgroundColor
+        window.navigationBarColor = backgroundColor
+        @Suppress("DEPRECATION")
+        window.decorView.systemUiVisibility = (
+            View.SYSTEM_UI_FLAG_FULLSCREEN or
+            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
+            View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+        )
         favorites.addAll(prefs.getStringSet("favorites", emptySet()) ?: emptySet())
         recent.addAll(prefs.getString("recent", "").orEmpty().split("|").filter { it.isNotBlank() })
         apps = discoverApps()
@@ -73,114 +92,113 @@ class MainActivity : Activity() {
         clockHandler.post(clockTick)
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (firstResume) {
+            firstResume = false
+            return
+        }
+        if (::content.isInitialized) {
+            val oldFocus = focusedPackage()
+            apps = discoverApps()
+            renderHome()
+            if (oldFocus != null) focusPackage(oldFocus)
+        }
+    }
+
     override fun onDestroy() {
         clockHandler.removeCallbacks(clockTick)
         super.onDestroy()
     }
 
-    override fun onResume() {
-        super.onResume()
-        if (::content.isInitialized) {
-            apps = discoverApps()
-            renderHome()
-        }
-    }
-
     private fun buildInterface() {
-        root = LinearLayout(this).apply {
+        val root = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setBackgroundColor(bg)
-            setPadding(dp(34), dp(24), dp(34), dp(18))
+            setBackgroundColor(backgroundColor)
+            setPadding(dp(30), dp(22), dp(30), dp(14))
         }
 
-        val sidebar = LinearLayout(this).apply {
+        sidebar = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-            setPadding(dp(8), dp(10), dp(8), dp(10))
+            setPadding(dp(5), dp(4), dp(5), dp(8))
         }
         sidebar.addView(TextView(this).apply {
-            text = "V."
-            textSize = 30f
+            text = "V"
+            textSize = 34f
             typeface = Typeface.create("sans-serif", Typeface.BOLD)
-            setTextColor(white)
             gravity = Gravity.CENTER
-            letterSpacing = -0.06f
-        }, LinearLayout.LayoutParams(-1, dp(58)))
+            setTextColor(primaryText)
+            letterSpacing = -0.08f
+        }, LinearLayout.LayoutParams(-1, dp(54)))
         sidebar.addView(TextView(this).apply {
             text = "VANTA"
-            textSize = 10f
-            letterSpacing = 0.22f
+            textSize = 9f
+            letterSpacing = 0.28f
             gravity = Gravity.CENTER
-            setTextColor(secondary)
-            setPadding(0, 0, 0, dp(34))
+            setTextColor(mutedText)
+            setPadding(0, 0, 0, dp(26))
         })
         val buttons = linkedMapOf<AppCategory, TextView>()
-        AppCategory.entries.forEach { category ->
+        AppCategory.values().forEach { category ->
             val item = TextView(this).apply {
-                text = when (category) {
-                    AppCategory.ALL -> "⌂"
-                    AppCategory.FAVORITES -> "♡"
-                    AppCategory.VIDEO -> "▣"
-                    AppCategory.MUSIC -> "♫"
-                    AppCategory.GAMES -> "⌘"
-                    AppCategory.OTHER -> "▦"
-                }
-                textSize = 25f
+                text = category.symbol
+                textSize = 24f
                 gravity = Gravity.CENTER
                 isFocusable = true
                 isClickable = true
                 contentDescription = category.title
-                background = rounded(Color.TRANSPARENT, 18)
-                setTextColor(secondary)
+                background = rounded(Color.TRANSPARENT, dp(16))
+                setTextColor(if (category == selectedCategory) primaryText else mutedText)
                 setOnClickListener { selectCategory(category) }
-                setOnFocusChangeListener { v, focused ->
-                    v.background = rounded(if (focused || selectedCategory == category) panelFocus else Color.TRANSPARENT, 18)
-                    (v as TextView).setTextColor(if (focused || selectedCategory == category) white else secondary)
-                    if (focused) selectCategory(category)
+                setOnFocusChangeListener { view, focused ->
+                    view.background = rounded(if (focused || selectedCategory == category) focusedColor else Color.TRANSPARENT, dp(16))
+                    (view as TextView).setTextColor(if (focused || selectedCategory == category) primaryText else mutedText)
+                    if (focused && selectedCategory != category) selectCategory(category)
                 }
-                setOnKeyListener { _, key, event ->
-                    if (event.action == KeyEvent.ACTION_DOWN && key == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                        firstContentFocus()
+                setOnKeyListener { _, keyCode, event ->
+                    if (event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                        focusFirstCard()
                         true
                     } else false
                 }
             }
             buttons[category] = item
-            sidebar.addView(item, LinearLayout.LayoutParams(dp(58), dp(54)).apply { bottomMargin = dp(8) })
+            sidebar.addView(item, LinearLayout.LayoutParams(dp(58), dp(54)).apply { bottomMargin = dp(7) })
         }
         navButtons = buttons
         sidebar.addView(View(this), LinearLayout.LayoutParams(1, 0, 1f))
         sidebar.addView(TextView(this).apply {
             text = "●"
-            textSize = 12f
+            textSize = 11f
             gravity = Gravity.CENTER
-            setTextColor(Color.rgb(90, 196, 154))
-        }, LinearLayout.LayoutParams(dp(58), dp(40)))
-        root.addView(sidebar, LinearLayout.LayoutParams(dp(78), -1))
+            setTextColor(Color.rgb(91, 197, 151))
+            contentDescription = "VANTA est actif"
+        }, LinearLayout.LayoutParams(dp(58), dp(34)))
+        root.addView(sidebar, LinearLayout.LayoutParams(dp(76), -1))
 
         val right = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(8), 0, dp(10), dp(14))
+            setPadding(dp(12), 0, dp(8), dp(16))
         }
         header.addView(TextView(this).apply {
-            text = when (selectedCategory) {
-                AppCategory.ALL -> "Regarder"
-                else -> selectedCategory.title
-            }
+            text = "Découvrir"
             textSize = 25f
             typeface = Typeface.create("sans-serif", Typeface.BOLD)
-            setTextColor(white)
+            setTextColor(primaryText)
         }, LinearLayout.LayoutParams(0, -2, 1f))
+
         search = EditText(this).apply {
-            hint = "Rechercher"
+            hint = "⌕  Rechercher"
             textSize = 13f
             setSingleLine(true)
-            setTextColor(white)
-            setHintTextColor(secondary)
-            setPadding(dp(14), 0, dp(14), 0)
-            background = rounded(panel, dp(20))
+            setTextColor(primaryText)
+            setHintTextColor(mutedText)
+            setPadding(dp(15), 0, dp(15), 0)
+            background = rounded(surfaceColor, dp(22))
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
             addTextChangedListener(object : android.text.TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
                 override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
@@ -190,14 +208,26 @@ class MainActivity : Activity() {
                 override fun afterTextChanged(s: android.text.Editable?) {}
             })
         }
-        header.addView(search, LinearLayout.LayoutParams(dp(210), dp(42)))
-        clock = TextView(this).apply {
-            textSize = 16f
-            setTextColor(white)
-            gravity = Gravity.CENTER
-            setPadding(dp(20), 0, dp(8), 0)
+        header.addView(search, LinearLayout.LayoutParams(dp(205), dp(42)).apply { marginEnd = dp(18) })
+
+        val timeColumn = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL or Gravity.RIGHT
         }
-        header.addView(clock)
+        clock = TextView(this).apply {
+            textSize = 17f
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            setTextColor(primaryText)
+            gravity = Gravity.RIGHT
+        }
+        date = TextView(this).apply {
+            textSize = 10f
+            setTextColor(mutedText)
+            gravity = Gravity.RIGHT
+        }
+        timeColumn.addView(clock)
+        timeColumn.addView(date)
+        header.addView(timeColumn, LinearLayout.LayoutParams(dp(118), -2))
         right.addView(header)
 
         mainScroll = ScrollView(this).apply {
@@ -205,10 +235,11 @@ class MainActivity : Activity() {
             overScrollMode = View.OVER_SCROLL_NEVER
             descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
             clipToPadding = false
+            isVerticalScrollBarEnabled = false
         }
         content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(8), dp(2), dp(12), dp(30))
+            setPadding(dp(10), dp(2), dp(12), dp(34))
         }
         mainScroll.addView(content)
         right.addView(mainScroll, LinearLayout.LayoutParams(-1, 0, 1f))
@@ -219,93 +250,132 @@ class MainActivity : Activity() {
     }
 
     private fun selectCategory(category: AppCategory) {
-        if (selectedCategory == category && content.childCount > 0) return
         selectedCategory = category
         navButtons.forEach { (key, view) ->
-            view.background = rounded(if (key == category) panelFocus else Color.TRANSPARENT, 18)
-            view.setTextColor(if (key == category) white else secondary)
+            view.background = rounded(if (key == category) focusedColor else Color.TRANSPARENT, dp(16))
+            view.setTextColor(if (key == category) primaryText else mutedText)
         }
         renderHome()
     }
 
     private fun renderHome() {
         if (!::content.isInitialized) return
+        val previousY = mainScroll.scrollY
         content.removeAllViews()
+
         if (searchQuery.isBlank() && selectedCategory == AppCategory.ALL) {
-            content.addView(buildHero(), LinearLayout.LayoutParams(-1, dp(290)).apply { bottomMargin = dp(26) })
-            val recently = recent.mapNotNull { key -> apps.firstOrNull { it.packageName == key } }.distinctBy { it.packageName }
-            if (recently.isNotEmpty()) addRail("Reprendre", recently)
-            val favs = apps.filter { favorites.contains(it.packageName) }
-            if (favs.isNotEmpty()) addRail("Ma liste", favs)
-            addRail("Vos applications", apps)
-            addRail("Films et séries", apps.filter { it.category == AppCategory.VIDEO })
-            addRail("Jeux", apps.filter { it.category == AppCategory.GAMES })
-            addRail("Musique", apps.filter { it.category == AppCategory.MUSIC })
-            addRail("Autres applications", apps.filter { it.category == AppCategory.OTHER })
+            content.addView(buildHero(), LinearLayout.LayoutParams(-1, dp(300)).apply {
+                bottomMargin = dp(25)
+            })
+            val recentlyUsed = recent.mapNotNull { key -> apps.firstOrNull { it.packageName == key } }
+                .distinctBy { it.packageName }
+            if (recentlyUsed.isNotEmpty()) addRail("Continuer", "Reprenez là où vous en étiez", recentlyUsed)
+            val favoriteApps = apps.filter { favorites.contains(it.packageName) }
+            if (favoriteApps.isNotEmpty()) addRail("Ma liste", "Vos applications préférées", favoriteApps)
+            addRail("Vos applications", "Tout votre divertissement", apps)
+            addRail("Films et séries", "Vos plateformes vidéo", apps.filter { it.category == AppCategory.VIDEO })
+            addRail("Jeux", "Jouez sur grand écran", apps.filter { it.category == AppCategory.GAMES })
+            addRail("Musique", "Écoutez vos playlists", apps.filter { it.category == AppCategory.MUSIC })
+            addRail("Autres applications", "Toutes les autres applications", apps.filter { it.category == AppCategory.OTHER })
         } else {
-            val filtered = when (selectedCategory) {
+            val base = when (selectedCategory) {
                 AppCategory.ALL -> apps
                 AppCategory.FAVORITES -> apps.filter { favorites.contains(it.packageName) }
                 else -> apps.filter { it.category == selectedCategory }
-            }.filter { searchQuery.isBlank() || it.label.contains(searchQuery, true) || it.packageName.contains(searchQuery, true) }
+            }
+            val filtered = base.filter {
+                searchQuery.isBlank() || it.label.contains(searchQuery, true) || it.packageName.contains(searchQuery, true)
+            }
             content.addView(TextView(this).apply {
-                text = if (searchQuery.isNotBlank()) "Résultats de recherche" else selectedCategory.title
-                textSize = 22f
+                text = if (searchQuery.isNotBlank()) "Résultats" else selectedCategory.title
+                textSize = 23f
                 typeface = Typeface.DEFAULT_BOLD
-                setTextColor(white)
-                setPadding(dp(4), dp(12), 0, dp(16))
+                setTextColor(primaryText)
+                setPadding(dp(4), dp(10), 0, dp(16))
             })
-            addRail("", filtered)
+            addRail("", "", filtered)
             if (filtered.isEmpty()) content.addView(TextView(this).apply {
                 text = "Aucune application trouvée"
                 textSize = 15f
-                setTextColor(secondary)
-                setPadding(dp(6), dp(24), 0, 0)
+                setTextColor(mutedText)
+                setPadding(dp(6), dp(25), 0, 0)
             })
         }
+        if (previousY > 0) mainScroll.post { mainScroll.scrollTo(0, previousY.coerceAtMost(content.height)) }
     }
 
     private fun buildHero(): View {
+        val featured = findFeaturedApp()
         val hero = FrameLayout(this).apply {
-            background = GradientDrawable(GradientDrawable.Orientation.TL_BR,
-                intArrayOf(Color.rgb(37, 57, 91), Color.rgb(24, 37, 62), Color.rgb(13, 19, 32))).apply {
-                cornerRadius = dp(22).toFloat()
-            }
+            background = GradientDrawable(
+                GradientDrawable.Orientation.BL_TR,
+                intArrayOf(Color.rgb(20, 37, 65), Color.rgb(18, 27, 47), Color.rgb(10, 14, 25))
+            ).apply { cornerRadius = dp(23).toFloat() }
             clipToOutline = true
-            setPadding(dp(34), dp(26), dp(30), dp(24))
+            setPadding(dp(34), dp(25), dp(30), dp(24))
         }
-        val glow = View(this).apply {
-            background = GradientDrawable(GradientDrawable.Orientation.TL_BR,
-                intArrayOf(Color.argb(100, 83, 143, 230), Color.argb(8, 80, 120, 210))).apply {
-                shape = GradientDrawable.OVAL
-            }
+
+        val ambient = View(this).apply {
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                intArrayOf(Color.argb(135, 65, 113, 190), Color.argb(15, 65, 113, 190))
+            ).apply { shape = GradientDrawable.OVAL }
         }
-        hero.addView(glow, FrameLayout.LayoutParams(dp(360), dp(360), Gravity.RIGHT or Gravity.CENTER_VERTICAL).apply {
-            rightMargin = dp(-70)
+        hero.addView(ambient, FrameLayout.LayoutParams(dp(420), dp(420), Gravity.RIGHT or Gravity.CENTER_VERTICAL).apply {
+            rightMargin = dp(-65)
         })
+
+        val art = FrameLayout(this).apply {
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                intArrayOf(Color.rgb(50, 72, 111), Color.rgb(24, 35, 57))
+            ).apply { cornerRadius = dp(22).toFloat() }
+            elevation = dp(8).toFloat()
+        }
+        if (featured != null) {
+            art.addView(ImageView(this).apply {
+                setImageDrawable(featured.icon)
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                setPadding(dp(24), dp(24), dp(24), dp(24))
+            }, FrameLayout.LayoutParams(-1, -1))
+        } else {
+            art.addView(TextView(this).apply {
+                text = "V"
+                textSize = 100f
+                gravity = Gravity.CENTER
+                typeface = Typeface.create("sans-serif", Typeface.BOLD)
+                setTextColor(Color.argb(225, 255, 255, 255))
+            }, FrameLayout.LayoutParams(-1, -1))
+        }
+        hero.addView(art, FrameLayout.LayoutParams(dp(190), dp(190), Gravity.RIGHT or Gravity.CENTER_VERTICAL).apply {
+            rightMargin = dp(58)
+        })
+
         val copy = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
         }
         copy.addView(TextView(this).apply {
-            text = "VANTA  •  ESPACE DE DIVERTISSEMENT"
+            text = "V A N T A     •     À LA UNE"
             textSize = 10f
-            letterSpacing = 0.18f
-            setTextColor(Color.rgb(190, 211, 245))
+            letterSpacing = 0.12f
             typeface = Typeface.DEFAULT_BOLD
+            setTextColor(Color.rgb(188, 210, 245))
         })
         copy.addView(TextView(this).apply {
-            text = "Tout votre\n divertissement.\nAu même endroit."
-            textSize = 31f
-            setLineSpacing(dp(1).toFloat(), 1.0f)
+            text = featured?.label ?: "Tout votre divertissement"
+            textSize = 33f
+            maxLines = 2
             typeface = Typeface.create("sans-serif", Typeface.BOLD)
-            setTextColor(white)
-            setPadding(0, dp(10), 0, dp(8))
+            setTextColor(primaryText)
+            setPadding(0, dp(10), 0, dp(6))
         })
         copy.addView(TextView(this).apply {
-            text = "Retrouvez vos applications et lancez Proximus TV en un instant."
+            text = if (featured?.packageName == "be.px.stbtvclient")
+                "Retrouvez vos chaînes et vos programmes en direct."
+            else "Vos applications préférées, réunies dans un seul endroit."
             textSize = 13f
-            setTextColor(Color.rgb(206, 215, 230))
+            setTextColor(Color.rgb(205, 215, 231))
             maxLines = 2
         })
         val actions = LinearLayout(this).apply {
@@ -313,72 +383,147 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(0, dp(20), 0, 0)
         }
-        actions.addView(actionButton("▶   Regarder la TV", true) { openProximus() },
-            LinearLayout.LayoutParams(-2, dp(46)).apply { marginEnd = dp(12) })
-        actions.addView(actionButton("Explorer les apps", false) {
-            selectCategory(AppCategory.OTHER)
-        }, LinearLayout.LayoutParams(-2, dp(46)))
+        actions.addView(heroButton("▶   Ouvrir", true) {
+            if (featured?.packageName == "be.px.stbtvclient") openProximus()
+            else if (featured != null) launchApp(featured.packageName)
+            else openProximus()
+        }, LinearLayout.LayoutParams(-2, dp(44)).apply { marginEnd = dp(12) })
+        actions.addView(heroButton("Explorer", false) { focusFirstCard() },
+            LinearLayout.LayoutParams(-2, dp(44)))
         copy.addView(actions)
-        hero.addView(copy, FrameLayout.LayoutParams(dp(650), -1, Gravity.LEFT or Gravity.CENTER_VERTICAL))
-        hero.isFocusable = false
+        hero.addView(copy, FrameLayout.LayoutParams(dp(590), -1, Gravity.LEFT or Gravity.CENTER_VERTICAL))
         return hero
     }
 
-    private fun addRail(title: String, items: List<TvApp>) {
+    private fun findFeaturedApp(): TvApp? {
+        val preferred = listOf("be.px.stbtvclient", "com.disney.disneyplus", "com.google.android.youtube.tv", "com.teamsmart.videomanager.tv", "com.crunchyroll.crunchyroid")
+        return preferred.firstNotNullOfOrNull { pkg -> apps.firstOrNull { it.packageName == pkg } }
+            ?: apps.firstOrNull()
+    }
+
+    private fun addRail(title: String, subtitle: String, items: List<TvApp>) {
         if (items.isEmpty()) return
-        if (title.isNotBlank()) content.addView(TextView(this).apply {
-            text = title
-            textSize = 19f
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            setTextColor(white)
-            setPadding(dp(4), dp(3), 0, dp(12))
-        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(2) })
+        if (title.isNotBlank()) {
+            val heading = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(4), dp(3), 0, dp(11))
+            }
+            heading.addView(TextView(this).apply {
+                text = title
+                textSize = 19f
+                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                setTextColor(primaryText)
+            })
+            if (subtitle.isNotBlank()) heading.addView(TextView(this).apply {
+                text = subtitle
+                textSize = 10f
+                setTextColor(mutedText)
+                setPadding(0, dp(2), 0, 0)
+            })
+            content.addView(heading, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(5) })
+        }
+
         val horizontal = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
             overScrollMode = View.OVER_SCROLL_NEVER
             descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
             clipToPadding = false
+            setPadding(dp(2), dp(5), dp(12), dp(12))
         }
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        items.forEach { app -> row.addView(appCard(app), LinearLayout.LayoutParams(dp(206), dp(158)).apply {
-            marginEnd = dp(14)
-            bottomMargin = dp(19)
-        }) }
+        items.forEachIndexed { index, app ->
+            row.addView(appCard(app, index == 0), LinearLayout.LayoutParams(dp(224), dp(158)).apply {
+                marginEnd = dp(15)
+            })
+        }
         horizontal.addView(row)
-        content.addView(horizontal, LinearLayout.LayoutParams(-1, dp(174)))
+        content.addView(horizontal, LinearLayout.LayoutParams(-1, dp(177)))
     }
 
-    private fun appCard(app: TvApp): View {
-        val card = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
+    private fun appCard(app: TvApp, firstInRow: Boolean): View {
+        val card = FrameLayout(this).apply {
             isFocusable = true
             isFocusableInTouchMode = true
             isClickable = true
-            background = rounded(panel, dp(15))
-            setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = rounded(surfaceColor, dp(15))
+            clipToOutline = true
             contentDescription = "Ouvrir ${app.label}. Appui long pour ajouter ou retirer des favoris."
         }
-        val art = FrameLayout(this).apply {
-            background = GradientDrawable(GradientDrawable.Orientation.TL_BR,
-                intArrayOf(Color.rgb(37, 47, 67), Color.rgb(20, 27, 42))).apply { cornerRadius = dp(10).toFloat() }
+
+        val palette = paletteFor(app.packageName)
+        card.background = GradientDrawable(
+            GradientDrawable.Orientation.TL_BR,
+            intArrayOf(palette.first, palette.second, Color.rgb(16, 20, 31))
+        ).apply { cornerRadius = dp(15).toFloat() }
+
+        val glow = View(this).apply {
+            background = GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                intArrayOf(Color.argb(100, 255, 255, 255), Color.argb(0, 255, 255, 255))
+            ).apply { shape = GradientDrawable.OVAL }
         }
-        art.addView(ImageView(this).apply {
+        card.addView(glow, FrameLayout.LayoutParams(dp(135), dp(135), Gravity.RIGHT or Gravity.TOP).apply {
+            rightMargin = dp(-32)
+            topMargin = dp(-48)
+        })
+
+        card.addView(ImageView(this).apply {
             setImageDrawable(app.icon)
             scaleType = ImageView.ScaleType.FIT_CENTER
-            setPadding(dp(22), dp(10), dp(22), dp(10))
-        }, FrameLayout.LayoutParams(-1, -1))
-        card.addView(art, LinearLayout.LayoutParams(-1, dp(94)))
-        card.addView(TextView(this).apply {
+            setPadding(dp(9), dp(9), dp(9), dp(9))
+        }, FrameLayout.LayoutParams(dp(70), dp(70), Gravity.TOP or Gravity.LEFT).apply {
+            leftMargin = dp(15)
+            topMargin = dp(14)
+        })
+
+        if (favorites.contains(app.packageName)) {
+            card.addView(TextView(this).apply {
+                text = "♥"
+                textSize = 12f
+                gravity = Gravity.CENTER
+                setTextColor(Color.WHITE)
+                background = rounded(Color.argb(95, 0, 0, 0), dp(14))
+            }, FrameLayout.LayoutParams(dp(27), dp(27), Gravity.TOP or Gravity.RIGHT).apply {
+                topMargin = dp(12)
+                rightMargin = dp(12)
+            })
+        }
+
+        val bottomShade = View(this).apply {
+            background = GradientDrawable(
+                GradientDrawable.Orientation.BOTTOM_TOP,
+                intArrayOf(Color.rgb(9, 12, 20), Color.argb(0, 9, 12, 20))
+            )
+        }
+        card.addView(bottomShade, FrameLayout.LayoutParams(-1, dp(78), Gravity.BOTTOM))
+
+        val labels = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(15), 0, dp(12), dp(12))
+            gravity = Gravity.BOTTOM
+        }
+        labels.addView(TextView(this).apply {
             text = app.label
-            textSize = 12f
+            textSize = 13f
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            gravity = Gravity.CENTER
-            setTextColor(white)
+            setTextColor(Color.WHITE)
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
-            setPadding(0, dp(8), 0, 0)
-        }, LinearLayout.LayoutParams(-1, -2))
+        })
+        labels.addView(TextView(this).apply {
+            text = when (app.category) {
+                AppCategory.VIDEO -> "FILMS ET SÉRIES"
+                AppCategory.MUSIC -> "MUSIQUE"
+                AppCategory.GAMES -> "JEUX"
+                else -> if (app.tvCompatible) "TV" else "APPLICATION"
+            }
+            textSize = 8f
+            letterSpacing = 0.1f
+            setTextColor(Color.rgb(195, 205, 222))
+            setPadding(0, dp(3), 0, 0)
+        })
+        card.addView(labels, FrameLayout.LayoutParams(-1, dp(67), Gravity.BOTTOM))
+
         card.setOnClickListener { launchApp(app.packageName) }
         card.setOnLongClickListener {
             if (!favorites.add(app.packageName)) favorites.remove(app.packageName)
@@ -388,47 +533,111 @@ class MainActivity : Activity() {
             true
         }
         card.setOnFocusChangeListener { view, focused ->
-            view.background = rounded(if (focused) panelFocus else panel, dp(15))
-            view.animate().scaleX(if (focused) 1.07f else 1f).scaleY(if (focused) 1.07f else 1f)
-                .setDuration(170).start()
-            view.elevation = if (focused) dp(12).toFloat() else 0f
-            if (focused) view.parent?.let { parent ->
-                (parent as? HorizontalScrollView)?.smoothScrollTo(view.left - dp(24), 0)
+            view.animate()
+                .scaleX(if (focused) 1.075f else 1f)
+                .scaleY(if (focused) 1.075f else 1f)
+                .setDuration(180)
+                .start()
+            view.elevation = if (focused) dp(16).toFloat() else 0f
+            if (focused) {
+                view.parent?.let { parent ->
+                    (parent as? HorizontalScrollView)?.smoothScrollTo(view.left - dp(18), 0)
+                }
             }
         }
-        card.setOnKeyListener { _, key, event ->
-            if (event.action == KeyEvent.ACTION_DOWN && key == KeyEvent.KEYCODE_DPAD_UP) {
-                mainScroll.smoothScrollBy(0, -dp(220))
-                false
-            } else false
+        card.setOnKeyListener { _, keyCode, event ->
+            if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
+            when (keyCode) {
+                KeyEvent.KEYCODE_DPAD_LEFT -> {
+                    val row = card.parent as? ViewGroup
+                    if (row != null && row.indexOfChild(card) == 0) {
+                        navButtons[selectedCategory]?.requestFocus()
+                        true
+                    } else false
+                }
+                KeyEvent.KEYCODE_DPAD_UP -> {
+                    val y = card.top
+                    if (y > dp(160)) mainScroll.smoothScrollBy(0, -dp(170))
+                    false
+                }
+                else -> false
+            }
         }
         return card
     }
 
-    private fun firstContentFocus() {
-        val scroll = content.getChildAt(1) as? HorizontalScrollView
-        val row = scroll?.getChildAt(0) as? ViewGroup
-        row?.getChildAt(0)?.requestFocus() ?: search.requestFocus()
+    private fun paletteFor(pkg: String): Pair<Int, Int> {
+        val key = pkg.lowercase()
+        return when {
+            "disney" in key -> Color.rgb(31, 56, 110) to Color.rgb(32, 83, 145)
+            "crunchy" in key -> Color.rgb(115, 48, 27) to Color.rgb(75, 30, 24)
+            "spotify" in key -> Color.rgb(24, 91, 70) to Color.rgb(17, 54, 46)
+            "twitch" in key -> Color.rgb(83, 48, 139) to Color.rgb(48, 30, 91)
+            "youtube" in key || "smarttube" in key -> Color.rgb(125, 35, 43) to Color.rgb(71, 24, 35)
+            "geforce" in key -> Color.rgb(49, 91, 44) to Color.rgb(24, 53, 34)
+            "f1" in key -> Color.rgb(120, 30, 39) to Color.rgb(62, 20, 31)
+            "retroarch" in key || "bomb" in key || "game" in key -> Color.rgb(45, 66, 102) to Color.rgb(30, 38, 70)
+            else -> Color.rgb(46, 66, 96) to Color.rgb(26, 37, 61)
+        }
     }
 
-    private fun actionButton(label: String, primary: Boolean, action: () -> Unit) =
+    private fun heroButton(label: String, primary: Boolean, action: () -> Unit): TextView =
         TextView(this).apply {
             text = label
             textSize = 13f
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
             setPadding(dp(18), 0, dp(18), 0)
-            setTextColor(if (primary) Color.rgb(10, 18, 30) else white)
-            background = rounded(if (primary) white else Color.argb(55, 255, 255, 255), dp(24))
+            setTextColor(if (primary) Color.rgb(10, 16, 27) else primaryText)
+            background = rounded(if (primary) Color.WHITE else Color.argb(48, 255, 255, 255), dp(24))
             isFocusable = true
             isClickable = true
             setOnClickListener { action() }
-            setOnFocusChangeListener { v, focused ->
-                v.scaleX = if (focused) 1.04f else 1f
-                v.scaleY = if (focused) 1.04f else 1f
-                v.elevation = if (focused) dp(8).toFloat() else 0f
+            setOnFocusChangeListener { view, focused ->
+                view.animate().scaleX(if (focused) 1.05f else 1f).scaleY(if (focused) 1.05f else 1f).setDuration(150).start()
+                view.elevation = if (focused) dp(9).toFloat() else 0f
             }
         }
+
+    private fun focusFirstCard() {
+        val card = findFirstCard(content)
+        if (card != null) card.requestFocus() else search.requestFocus()
+    }
+
+    private fun findFirstCard(group: ViewGroup): View? {
+        for (i in 0 until group.childCount) {
+            val child = group.getChildAt(i)
+            if (child is HorizontalScrollView) {
+                val row = child.getChildAt(0) as? ViewGroup
+                if (row != null && row.childCount > 0) return row.getChildAt(0)
+            }
+            if (child is ViewGroup) {
+                val nested = findFirstCard(child)
+                if (nested != null) return nested
+            }
+        }
+        return null
+    }
+
+    private fun focusedPackage(): String? {
+        val focused = window.decorView.findFocus() ?: return null
+        return focused.contentDescription?.toString()
+            ?.removePrefix("Ouvrir ")?.substringBefore(". Appui long")
+            ?.let { label -> apps.firstOrNull { it.label == label }?.packageName }
+    }
+
+    private fun focusPackage(pkg: String) {
+        val app = apps.firstOrNull { it.packageName == pkg } ?: return
+        fun searchView(group: ViewGroup): View? {
+            for (i in 0 until group.childCount) {
+                val child = group.getChildAt(i)
+                if (child.contentDescription?.toString()?.startsWith("Ouvrir ${app.label}") == true) return child
+                if (child is ViewGroup) searchView(child)?.let { return it }
+            }
+            return null
+        }
+        searchView(content)?.requestFocus()
+    }
 
     private fun discoverApps(): List<TvApp> {
         val found = linkedMapOf<String, TvApp>()
@@ -437,12 +646,13 @@ class MainActivity : Activity() {
             Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         )
         intents.forEach { intent ->
-            val results = if (Build.VERSION.SDK_INT >= 33) packageManager.queryIntentActivities(intent, PackageManager.ResolveInfoFlags.of(0))
-            else {
+            val results = if (Build.VERSION.SDK_INT >= 33) {
+                packageManager.queryIntentActivities(intent, PackageManager.ResolveInfoFlags.of(0))
+            } else {
                 @Suppress("DEPRECATION")
                 packageManager.queryIntentActivities(intent, 0)
             }
-            val tv = intent.hasCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
+            val tvCompatible = intent.hasCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
             results.forEach resultLoop@{ info ->
                 val pkg = info.activityInfo?.packageName ?: return@resultLoop
                 if (pkg == packageName) return@resultLoop
@@ -451,15 +661,15 @@ class MainActivity : Activity() {
                 if (label.isBlank()) return@resultLoop
                 val icon = runCatching { info.loadIcon(packageManager) }.getOrNull() ?: return@resultLoop
                 val old = found[pkg]
-                if (old == null) found[pkg] = TvApp(label, pkg, icon, categorize(pkg, label), tv)
-                else if (tv && !old.tvCompatible) found[pkg] = old.copy(tvCompatible = true)
+                if (old == null) found[pkg] = TvApp(label, pkg, icon, categorize(pkg, label), tvCompatible)
+                else if (tvCompatible && !old.tvCompatible) found[pkg] = old.copy(tvCompatible = true)
             }
         }
-        return found.values.sortedBy { it.label.lowercase() }
+        return found.values.sortedBy { it.label.lowercase(Locale.getDefault()) }
     }
 
     private fun categorize(pkg: String, label: String): AppCategory {
-        val value = "$pkg $label".lowercase()
+        val value = "$pkg $label".lowercase(Locale.getDefault())
         return when {
             listOf("youtube", "netflix", "disney", "crunchy", "primevideo", "plex", "twitch", "auvio", "rtl", "tvi", "f1", "stb", "proximus", "vlc", "tvbro", "smarttube").any(value::contains) -> AppCategory.VIDEO
             listOf("spotify", "music", "deezer", "soundcloud", "radio").any(value::contains) -> AppCategory.MUSIC
@@ -475,8 +685,10 @@ class MainActivity : Activity() {
             rememberRecent("be.px.stbtvclient")
         }.onFailure {
             val fallback = packageManager.getLaunchIntentForPackage("be.px.stbtvclient")
-            if (fallback != null) runCatching { startActivity(fallback); rememberRecent("be.px.stbtvclient") }
-            else Toast.makeText(this, "Proximus TV est introuvable. Ne désinstallez pas l'application Proximus.", Toast.LENGTH_LONG).show()
+            if (fallback != null) runCatching {
+                startActivity(fallback)
+                rememberRecent("be.px.stbtvclient")
+            } else Toast.makeText(this, "Proximus TV est introuvable.", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -493,8 +705,12 @@ class MainActivity : Activity() {
             Toast.makeText(this, "Application non lançable", Toast.LENGTH_SHORT).show()
             return
         }
-        runCatching { startActivity(intent); rememberRecent(pkg) }
-            .onFailure { Toast.makeText(this, "Impossible d'ouvrir cette application", Toast.LENGTH_SHORT).show() }
+        runCatching {
+            rememberRecent(pkg)
+            startActivity(intent)
+        }.onFailure {
+            Toast.makeText(this, "Impossible d'ouvrir cette application", Toast.LENGTH_SHORT).show()
+        }
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
