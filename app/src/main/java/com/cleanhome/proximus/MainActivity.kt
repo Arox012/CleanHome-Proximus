@@ -176,7 +176,7 @@ class MainActivity : Activity() {
         search = EditText(this).apply {
             hint = "Rechercher"
             textSize = 13f
-            singleLine = true
+            setSingleLine(true)
             setTextColor(white)
             setHintTextColor(secondary)
             setPadding(dp(14), 0, dp(14), 0)
@@ -297,7 +297,7 @@ class MainActivity : Activity() {
         copy.addView(TextView(this).apply {
             text = "Tout votre\n divertissement.\nAu même endroit."
             textSize = 31f
-            lineSpacing = dp(1).toFloat()
+            setLineSpacing(dp(1).toFloat(), 1.0f)
             typeface = Typeface.create("sans-serif", Typeface.BOLD)
             setTextColor(white)
             setPadding(0, dp(10), 0, dp(8))
