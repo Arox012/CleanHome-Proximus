@@ -249,7 +249,7 @@ class MainActivity : Activity() {
             addRail("Autres applications", "Toutes les autres applications", apps.filter { it.category == AppCategory.OTHER })
         } else {
             val base = when (selectedCategory) {
-                AppCategory.ALL -> apps
+                AppCategory.ALL, AppCategory.OTHER -> apps
                 AppCategory.FAVORITES -> apps.filter { favorites.contains(it.packageName) }
                 else -> apps.filter { it.category == selectedCategory }
             }
@@ -263,7 +263,7 @@ class MainActivity : Activity() {
                 setTextColor(primaryText)
                 setPadding(dp(4), dp(10), 0, dp(16))
             })
-            addRail("", "", filtered)
+            addGrid(filtered)
             if (filtered.isEmpty()) content.addView(TextView(this).apply {
                 text = "Aucune application trouvée"
                 textSize = 15f
@@ -272,6 +272,41 @@ class MainActivity : Activity() {
             })
         }
         if (previousY > 0) mainScroll.post { mainScroll.scrollTo(0, previousY.coerceAtMost(content.height)) }
+    }
+
+    private fun addGrid(items: List<TvApp>) {
+        if (items.isEmpty()) return
+        val availableWidth = (resources.configuration.screenWidthDp - 110).coerceAtLeast(320)
+        val columns = when {
+            availableWidth >= 1350 -> 4
+            availableWidth >= 900 -> 3
+            availableWidth >= 580 -> 2
+            else -> 1
+        }
+        val grid = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(4), dp(8), dp(24))
+        }
+        items.chunked(columns).forEachIndexed { rowIndex, rowApps ->
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.TOP
+            }
+            rowApps.forEach { app ->
+                row.addView(appCard(app, false), LinearLayout.LayoutParams(0, dp(172), 1f).apply {
+                    marginEnd = dp(14)
+                })
+            }
+            repeat(columns - rowApps.size) {
+                row.addView(View(this), LinearLayout.LayoutParams(0, dp(172), 1f).apply {
+                    marginEnd = dp(14)
+                })
+            }
+            grid.addView(row, LinearLayout.LayoutParams(-1, dp(184)).apply {
+                if (rowIndex > 0) topMargin = dp(12)
+            })
+        }
+        content.addView(grid, LinearLayout.LayoutParams(-1, -2))
     }
 
     private fun buildHero(): View {
@@ -522,7 +557,8 @@ class MainActivity : Activity() {
             when (keyCode) {
                 KeyEvent.KEYCODE_DPAD_LEFT -> {
                     val row = card.parent as? ViewGroup
-                    if (row != null && row.indexOfChild(card) == 0) {
+                    val rowIndex = if (row != null) (row.parent as? ViewGroup)?.indexOfChild(row) ?: 0 else 0
+                    if (row != null && row.indexOfChild(card) == 0 && rowIndex == 0) {
                         navButtons[selectedCategory]?.requestFocus()
                         true
                     } else false
@@ -643,9 +679,9 @@ class MainActivity : Activity() {
     private fun categorize(pkg: String, label: String): AppCategory {
         val value = "$pkg $label".lowercase(Locale.getDefault())
         return when {
-            listOf("youtube", "netflix", "disney", "crunchy", "primevideo", "plex", "twitch", "auvio", "rtl", "tvi", "f1", "stb", "proximus", "vlc", "tvbro", "smarttube").any(value::contains) -> AppCategory.VIDEO
+            listOf("twitch", "game", "geforce", "steam", "xbox", "retroarch", "emulator", "bombsquad", "sonic").any(value::contains) -> AppCategory.GAMES
+            listOf("youtube", "netflix", "disney", "crunchy", "primevideo", "plex", "auvio", "rtl", "tvi", "f1", "stb", "proximus", "vlc", "tvbro", "smarttube").any(value::contains) -> AppCategory.VIDEO
             listOf("spotify", "music", "deezer", "soundcloud", "radio").any(value::contains) -> AppCategory.MUSIC
-            listOf("game", "geforce", "steam", "xbox", "retroarch", "emulator", "bombsquad", "sonic").any(value::contains) -> AppCategory.GAMES
             else -> AppCategory.OTHER
         }
     }
