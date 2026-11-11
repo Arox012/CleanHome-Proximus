@@ -112,83 +112,54 @@ class MainActivity : Activity() {
     }
 
     private fun buildInterface() {
+        // Apple TV-inspired layout: top navigation, immersive featured area and horizontal content rails.
         val root = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
+            orientation = LinearLayout.VERTICAL
             setBackgroundColor(backgroundColor)
-            setPadding(dp(30), dp(22), dp(30), dp(14))
+            setPadding(dp(42), dp(18), dp(42), dp(8))
         }
 
-        sidebar = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-            setPadding(dp(5), dp(4), dp(5), dp(8))
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(4), 0, dp(4), dp(14))
         }
-        sidebar.addView(TextView(this).apply {
-            text = "V"
-            textSize = 34f
-            typeface = Typeface.create("sans-serif", Typeface.BOLD)
-            gravity = Gravity.CENTER
-            setTextColor(primaryText)
-            letterSpacing = -0.08f
-        }, LinearLayout.LayoutParams(-1, dp(54)))
-        sidebar.addView(TextView(this).apply {
+        header.addView(TextView(this).apply {
             text = "VANTA"
-            textSize = 9f
-            letterSpacing = 0.28f
-            gravity = Gravity.CENTER
-            setTextColor(mutedText)
-            setPadding(0, 0, 0, dp(26))
-        })
+            textSize = 23f
+            letterSpacing = 0.16f
+            typeface = Typeface.create("sans-serif", Typeface.BOLD)
+            setTextColor(primaryText)
+        }, LinearLayout.LayoutParams(dp(125), dp(48)))
+
+        val tabs = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
         val buttons = linkedMapOf<AppCategory, TextView>()
         AppCategory.values().forEach { category ->
             val item = TextView(this).apply {
-                text = category.symbol
-                textSize = 24f
+                text = category.title
+                textSize = 13f
                 gravity = Gravity.CENTER
                 isFocusable = true
                 isClickable = true
                 contentDescription = category.title
-                background = rounded(Color.TRANSPARENT, dp(16))
+                setPadding(dp(15), dp(10), dp(15), dp(10))
+                background = rounded(Color.TRANSPARENT, dp(18))
                 setTextColor(if (category == selectedCategory) primaryText else mutedText)
                 setOnClickListener { selectCategory(category) }
                 setOnFocusChangeListener { view, focused ->
-                    view.background = rounded(if (focused || selectedCategory == category) focusedColor else Color.TRANSPARENT, dp(16))
+                    view.background = rounded(if (focused) Color.rgb(48, 56, 73) else if (selectedCategory == category) Color.rgb(31, 37, 50) else Color.TRANSPARENT, dp(18))
                     (view as TextView).setTextColor(if (focused || selectedCategory == category) primaryText else mutedText)
                     if (focused && selectedCategory != category) selectCategory(category)
                 }
-                setOnKeyListener { _, keyCode, event ->
-                    if (event.action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-                        focusFirstCard()
-                        true
-                    } else false
-                }
             }
             buttons[category] = item
-            sidebar.addView(item, LinearLayout.LayoutParams(dp(58), dp(54)).apply { bottomMargin = dp(7) })
+            tabs.addView(item, LinearLayout.LayoutParams(-2, dp(44)).apply { marginEnd = dp(3) })
         }
         navButtons = buttons
-        sidebar.addView(View(this), LinearLayout.LayoutParams(1, 0, 1f))
-        sidebar.addView(TextView(this).apply {
-            text = "●"
-            textSize = 11f
-            gravity = Gravity.CENTER
-            setTextColor(Color.rgb(91, 197, 151))
-            contentDescription = "VANTA est actif"
-        }, LinearLayout.LayoutParams(dp(58), dp(34)))
-        root.addView(sidebar, LinearLayout.LayoutParams(dp(76), -1))
-
-        val right = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        val header = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(12), 0, dp(8), dp(16))
-        }
-        header.addView(TextView(this).apply {
-            text = "Découvrir"
-            textSize = 25f
-            typeface = Typeface.create("sans-serif", Typeface.BOLD)
-            setTextColor(primaryText)
-        }, LinearLayout.LayoutParams(0, -2, 1f))
+        header.addView(tabs, LinearLayout.LayoutParams(0, -2, 1f))
 
         search = EditText(this).apply {
             hint = "⌕  Rechercher"
@@ -208,7 +179,7 @@ class MainActivity : Activity() {
                 override fun afterTextChanged(s: android.text.Editable?) {}
             })
         }
-        header.addView(search, LinearLayout.LayoutParams(dp(205), dp(42)).apply { marginEnd = dp(18) })
+        header.addView(search, LinearLayout.LayoutParams(dp(190), dp(40)).apply { marginEnd = dp(18) })
 
         val timeColumn = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -227,8 +198,8 @@ class MainActivity : Activity() {
         }
         timeColumn.addView(clock)
         timeColumn.addView(date)
-        header.addView(timeColumn, LinearLayout.LayoutParams(dp(118), -2))
-        right.addView(header)
+        header.addView(timeColumn, LinearLayout.LayoutParams(dp(112), -2))
+        root.addView(header, LinearLayout.LayoutParams(-1, dp(58)))
 
         mainScroll = ScrollView(this).apply {
             isFillViewport = false
@@ -239,11 +210,10 @@ class MainActivity : Activity() {
         }
         content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(10), dp(2), dp(12), dp(34))
+            setPadding(dp(4), dp(3), dp(12), dp(40))
         }
         mainScroll.addView(content)
-        right.addView(mainScroll, LinearLayout.LayoutParams(-1, 0, 1f))
-        root.addView(right, LinearLayout.LayoutParams(0, -1, 1f))
+        root.addView(mainScroll, LinearLayout.LayoutParams(-1, 0, 1f))
         setContentView(root)
         renderHome()
         navButtons[AppCategory.ALL]?.requestFocus()
@@ -264,7 +234,7 @@ class MainActivity : Activity() {
         content.removeAllViews()
 
         if (searchQuery.isBlank() && selectedCategory == AppCategory.ALL) {
-            content.addView(buildHero(), LinearLayout.LayoutParams(-1, dp(300)).apply {
+            content.addView(buildHero(), LinearLayout.LayoutParams(-1, dp(340)).apply {
                 bottomMargin = dp(25)
             })
             val recentlyUsed = recent.mapNotNull { key -> apps.firstOrNull { it.packageName == key } }
@@ -432,12 +402,12 @@ class MainActivity : Activity() {
         }
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         items.forEachIndexed { index, app ->
-            row.addView(appCard(app, index == 0), LinearLayout.LayoutParams(dp(224), dp(158)).apply {
+            row.addView(appCard(app, index == 0), LinearLayout.LayoutParams(dp(292), dp(172)).apply {
                 marginEnd = dp(15)
             })
         }
         horizontal.addView(row)
-        content.addView(horizontal, LinearLayout.LayoutParams(-1, dp(177)))
+        content.addView(horizontal, LinearLayout.LayoutParams(-1, dp(194)))
     }
 
     private fun appCard(app: TvApp, firstInRow: Boolean): View {
@@ -462,18 +432,20 @@ class MainActivity : Activity() {
                 intArrayOf(Color.argb(100, 255, 255, 255), Color.argb(0, 255, 255, 255))
             ).apply { shape = GradientDrawable.OVAL }
         }
-        card.addView(glow, FrameLayout.LayoutParams(dp(135), dp(135), Gravity.RIGHT or Gravity.TOP).apply {
+        card.addView(glow, FrameLayout.LayoutParams(dp(185), dp(185), Gravity.RIGHT or Gravity.TOP).apply {
             rightMargin = dp(-32)
             topMargin = dp(-48)
         })
 
+        // Large artwork area: the installed app identity becomes the visual cover, not a tiny launcher icon.
         card.addView(ImageView(this).apply {
             setImageDrawable(app.icon)
             scaleType = ImageView.ScaleType.FIT_CENTER
-            setPadding(dp(9), dp(9), dp(9), dp(9))
-        }, FrameLayout.LayoutParams(dp(70), dp(70), Gravity.TOP or Gravity.LEFT).apply {
-            leftMargin = dp(15)
-            topMargin = dp(14)
+            setPadding(dp(5), dp(5), dp(5), dp(5))
+            alpha = 0.96f
+        }, FrameLayout.LayoutParams(dp(118), dp(118), Gravity.RIGHT or Gravity.CENTER_VERTICAL).apply {
+            rightMargin = dp(24)
+            bottomMargin = dp(12)
         })
 
         if (favorites.contains(app.packageName)) {
@@ -499,7 +471,7 @@ class MainActivity : Activity() {
 
         val labels = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(15), 0, dp(12), dp(12))
+            setPadding(dp(20), 0, dp(142), dp(13))
             gravity = Gravity.BOTTOM
         }
         labels.addView(TextView(this).apply {
@@ -522,7 +494,7 @@ class MainActivity : Activity() {
             setTextColor(Color.rgb(195, 205, 222))
             setPadding(0, dp(3), 0, 0)
         })
-        card.addView(labels, FrameLayout.LayoutParams(-1, dp(67), Gravity.BOTTOM))
+        card.addView(labels, FrameLayout.LayoutParams(-1, dp(76), Gravity.BOTTOM))
 
         card.setOnClickListener { launchApp(app.packageName) }
         card.setOnLongClickListener {
