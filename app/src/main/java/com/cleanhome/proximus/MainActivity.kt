@@ -64,6 +64,7 @@ class MainActivity : Activity() {
     private lateinit var date: TextView
     private lateinit var sidebar: LinearLayout
     private lateinit var navButtons: Map<AppCategory, TextView>
+    private lateinit var navScroll: HorizontalScrollView
 
     private val clockHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val clockTick = object : Runnable {
@@ -159,7 +160,15 @@ class MainActivity : Activity() {
             tabs.addView(item, LinearLayout.LayoutParams(-2, dp(44)).apply { marginEnd = dp(3) })
         }
         navButtons = buttons
-        header.addView(tabs, LinearLayout.LayoutParams(0, -2, 1f))
+        navScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+            isFillViewport = false
+            clipToPadding = false
+            descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+            addView(tabs, ViewGroup.LayoutParams(-2, -2))
+        }
+        header.addView(navScroll, LinearLayout.LayoutParams(0, dp(48), 1f))
 
         search = EditText(this).apply {
             hint = "⌕  Rechercher"
@@ -226,6 +235,7 @@ class MainActivity : Activity() {
             view.setTextColor(if (key == category) primaryText else mutedText)
         }
         renderHome()
+        navScroll.post { navButtons[category]?.let { navScroll.smoothScrollTo(it.left - dp(12), 0) } }
     }
 
     private fun renderHome() {
